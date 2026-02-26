@@ -42,7 +42,7 @@ function loop(ts) {
   
   updateWeather(dt);
   drawRoom();
-  trashes = trashes.filter(t => !t.eaten); // 清理扫地机吃掉的垃圾
+  trashes = trashes.filter(t => !t.eaten); 
   
   spawnTimer-=dt;
   if(spawnTimer<=0 && trashes.length < 15) {
@@ -52,27 +52,22 @@ function loop(ts) {
   
   let entities = [...furnitures, ...trashes, ...cats];
   
-  // 核心修复：基于真实视觉坐标的物理层级吸附
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
     
-    // 把家具的基础层推远一点
     if(a.t === 'bed' || a.t === 'tree' || a.t === 'box') ay -= 5;
     if(b.t === 'bed' || b.t === 'tree' || b.t === 'box') by -= 5;
 
-    // 如果猫和家具绑定了，直接吸附该家具的Y轴
     if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(a.state) && a.targetObj) {
-      ay = a.targetObj.y + 1; // 永远在家具上面（前面）一点点
+      ay = a.targetObj.y + 1; 
     }
     if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(b.state) && b.targetObj) {
       by = b.targetObj.y + 1;
     }
     
-    // 黑猫偷窥强制藏在背后
     if(a instanceof Cat && a.state === 'hide') ay -= 50; 
     if(b instanceof Cat && b.state === 'hide') by -= 50;
     
-    // 被抓起的物体永远在最前
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
     return ay - by;
   });
@@ -98,14 +93,27 @@ let grabbedObj = null, cardTimeout = null;
 canvas.addEventListener('mousedown', e => {
   const pos = getMousePos(e);
   
-  // 每次点击全局优先关闭弹窗
   card.style.display = 'none';
   if(cardTimeout) clearTimeout(cardTimeout);
   
-  // 点扫地机强制解救宕机
+  // 核心修复：点击扫地机的多重判定（解救/踢倒/吐纸团）
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
-    if(gemini.state === 'stuck') { gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '=_='; return; }
-    if(gemini.state === 'sweep') { gemini.emo = '♥'; }
+    if(gemini.state === 'stuck' || gemini.state === 'frenzy') {
+      gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '=_='; 
+      // 吐出金色纸团，保持上限4个
+      let golds = trashes.filter(t => t.isGolden);
+      if(golds.length >= 4) {
+         let idx = trashes.findIndex(t => t.isGolden);
+         if(idx > -1) trashes.splice(idx, 1);
+      }
+      trashes.push(new Trash(gemini.x, gemini.y+10, 0, -2, true));
+      return; 
+    } else {
+      // 正常状态被点击，强制宕机（踢倒）
+      gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = '×_×';
+      if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
+      return;
+    }
   }
   
   for(let i=cats.length-1; i>=0; i--) {
