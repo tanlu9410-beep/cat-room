@@ -42,9 +42,7 @@ function loop(ts) {
   
   updateWeather(dt);
   drawRoom();
-  
-  // 实时清理被吃掉的纸团
-  trashes = trashes.filter(t => !t.eaten);
+  trashes = trashes.filter(t => !t.eaten); // 清理扫地机吃掉的垃圾
   
   spawnTimer-=dt;
   if(spawnTimer<=0 && trashes.length < 15) {
@@ -54,29 +52,27 @@ function loop(ts) {
   
   let entities = [...furnitures, ...trashes, ...cats];
   
-  // 彻底重构的深度图层系统
+  // 核心修复：基于真实视觉坐标的物理层级吸附
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
-    if(a.climbY) ay += a.climbY; 
-    if(b.climbY) by += b.climbY;
     
-    // 强制把猫窝推远，让它永远垫在脚下
-    if(a.t === 'bed') ay -= 30; 
-    else if(a instanceof Cat) {
-      if(a.state === 'sit_box' || a.state === 'in_bin') ay += 100;
-      if(a.state === 'sleep_bed') ay = a.targetObj ? a.targetObj.y - 29 : ay; // 贴在猫窝上面
-      if(a.state === 'climb' || a.state === 'sit_tree') ay += 200; 
-      if(a.state === 'hide') ay -= 50; 
+    // 把家具的基础层推远一点
+    if(a.t === 'bed' || a.t === 'tree' || a.t === 'box') ay -= 5;
+    if(b.t === 'bed' || b.t === 'tree' || b.t === 'box') by -= 5;
+
+    // 如果猫和家具绑定了，直接吸附该家具的Y轴
+    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(a.state) && a.targetObj) {
+      ay = a.targetObj.y + 1; // 永远在家具上面（前面）一点点
+    }
+    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(b.state) && b.targetObj) {
+      by = b.targetObj.y + 1;
     }
     
-    if(b.t === 'bed') by -= 30;
-    else if(b instanceof Cat) {
-      if(b.state === 'sit_box' || b.state === 'in_bin') by += 100;
-      if(b.state === 'sleep_bed') by = b.targetObj ? b.targetObj.y - 29 : by;
-      if(b.state === 'climb' || b.state === 'sit_tree') by += 200;
-      if(b.state === 'hide') by -= 50;
-    }
+    // 黑猫偷窥强制藏在背后
+    if(a instanceof Cat && a.state === 'hide') ay -= 50; 
+    if(b instanceof Cat && b.state === 'hide') by -= 50;
     
+    // 被抓起的物体永远在最前
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
     return ay - by;
   });
@@ -102,18 +98,19 @@ let grabbedObj = null, cardTimeout = null;
 canvas.addEventListener('mousedown', e => {
   const pos = getMousePos(e);
   
-  // 每次点击任何地方，先关闭弹窗
+  // 每次点击全局优先关闭弹窗
   card.style.display = 'none';
   if(cardTimeout) clearTimeout(cardTimeout);
   
+  // 点扫地机强制解救宕机
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
-    if(gemini.state === 'frenzy') { gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '×_×'; return; }
+    if(gemini.state === 'stuck') { gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '=_='; return; }
     if(gemini.state === 'sweep') { gemini.emo = '♥'; }
   }
   
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
-    let hitRadius = c.type === 'black' ? 60 : 40;
+    let hitRadius = c.type === 'black' || c.type === 'grey' ? 60 : 40;
     if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { 
       grabbedObj = c; c.isGrabbed = true; c.riding = false; 
       e.preventDefault(); 
@@ -140,18 +137,15 @@ canvas.addEventListener('mousedown', e => {
     const rect = card.getBoundingClientRect();
     const cWidth = rect.width || 280;
     const cHeight = rect.height || 80;
-    
     let cardLeft = e.clientX - cWidth / 2;
     let cardTop = e.clientY - cHeight - 15;
     
-    // 完美的视窗防溢出推回算法
     if (cardLeft + cWidth > window.innerWidth) cardLeft = window.innerWidth - cWidth - 15;
     if (cardLeft < 15) cardLeft = 15;
-    if (cardTop < 15) cardTop = e.clientY + 25; // 顶部挤不下了就显示在鼠标下面
+    if (cardTop < 15) cardTop = e.clientY + 25; 
     
     card.style.left = cardLeft + 'px';
     card.style.top = cardTop + 'px';
-    
     cardTimeout = setTimeout(()=>card.style.display='none', 5000);
   }
 });
@@ -163,7 +157,6 @@ window.addEventListener('mouseup', e => {
       grabbedObj.state = 'wander'; 
       grabbedObj.climbY = 0; 
       
-      // 空投强制社交逻辑：寻找降落点最近的猫
       let closest = null; let minDist = 60;
       cats.forEach(other => {
         if(other !== grabbedObj && !other.isGrabbed) {
