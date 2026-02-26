@@ -1,7 +1,24 @@
+window.mouseX = W/2; window.mouseY = H/2;
+
+function getMousePos(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+}
+
+window.addEventListener('mousemove', e => { 
+  const pos = getMousePos(e); 
+  window.mouseX = pos.x; 
+  window.mouseY = pos.y; 
+});
+
 const cats = [
-  new Cat('white', W/2-50, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
-  new Cat('cow', W/2+100, {body:'#f5f5f5', ear:'#222222', eye:'#d4af37'}),
-  new Cat('black', W/2-100, {body:'#1a1a1a', ear:'#0a0a0a', eye:'#ffe600'}),
+  new Cat('white', W/2-100, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
+  new Cat('grey', W/2-50, {body:'#9e968d', ear:'#827a70', eye:'#4a6b82'}),
+  new Cat('orange', W/2, {body:'#e0ab67', ear:'#c28b4a', eye:'#7b5c94'}),
+  new Cat('cow', W/2+50, {body:'#f5f5f5', ear:'#222222', eye:'#d4af37'}),
+  new Cat('black', W/2+100, {body:'#1a1a1a', ear:'#0a0a0a', eye:'#ffe600'}),
   new Cat('curly', W/2+150, {body:'#fdf8f5', ear:'#f4e4e0', eye:'#8bbab4'})
 ];
 const gemini = new GeminiBot();
@@ -22,17 +39,17 @@ function loop(ts) {
   }
   
   let entities = [...furnitures, ...trashes, ...cats];
-  // 复杂的深度排序：涵盖攀爬、箱内、掩体后和普通遮挡
+  // 复杂的深度排序：涵盖攀爬、箱内、猫窝、掩体后和普通遮挡
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
     if(a instanceof Cat) {
-      if(a.state === 'sit_box' || a.state === 'in_bin') ay += 100;
-      if(a.state === 'climb' || a.state === 'sit_tree') ay += 200; 
+      if(['sit_box', 'in_bin', 'sleep_bed'].includes(a.state)) ay += 100;
+      if(['climb', 'sit_tree'].includes(a.state)) ay += 200; 
       if(a.state === 'hide') ay -= 50; 
     }
     if(b instanceof Cat) {
-      if(b.state === 'sit_box' || b.state === 'in_bin') by += 100;
-      if(b.state === 'climb' || b.state === 'sit_tree') by += 200;
+      if(['sit_box', 'in_bin', 'sleep_bed'].includes(b.state)) by += 100;
+      if(['climb', 'sit_tree'].includes(b.state)) by += 200;
       if(b.state === 'hide') by -= 50;
     }
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
@@ -67,7 +84,9 @@ canvas.addEventListener('mousedown', e => {
   
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
-    if(Math.abs(c.x-pos.x)<40 && Math.abs((c.y+c.climbY)-pos.y)<40) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
+    // 黑猫点击判定范围稍大
+    let hitRadius = c.type === 'black' ? 60 : 40;
+    if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
   }
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
@@ -94,14 +113,6 @@ canvas.addEventListener('mousedown', e => {
     if(cardTimeout) clearTimeout(cardTimeout);
     cardTimeout = setTimeout(()=>card.style.display='none', 4500);
   }
-});
-
-window.addEventListener('mousemove', e => { 
-  if(grabbedObj) { 
-    const pos = getMousePos(e);
-    if(grabbedObj.ox !== undefined) { grabbedObj.x = pos.x + grabbedObj.ox; grabbedObj.y = pos.y + grabbedObj.oy; }
-    else { grabbedObj.x = pos.x; grabbedObj.y = pos.y; grabbedObj.climbY = 0; }
-  } 
 });
 
 window.addEventListener('mouseup', e => { 
