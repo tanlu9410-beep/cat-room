@@ -29,7 +29,8 @@ class Cat {
     if(this.state === 'climb' && this.targetObj) {
       this.x = this.targetObj.x; 
       this.climbY -= 0.05 * dt; 
-      if(this.climbY <= -85) { this.climbY = -85; this.state = 'sit_tree'; this.timer = 8000; }
+      // 修复猫爬架悬空：偏移量调整为-65
+      if(this.climbY <= -65) { this.climbY = -65; this.state = 'sit_tree'; this.timer = 8000; }
       return;
     }
     if(this.state === 'sit_tree') {
@@ -66,8 +67,8 @@ class Cat {
       }
     }
     
-    // 白猫推垃圾
-    if(this.type === 'white' && this.state === 'wander' && Math.random() < 0.1) {
+    // 白猫推垃圾概率拉高
+    if(this.type === 'white' && this.state === 'wander' && Math.random() < 0.2) {
       trashes.forEach(t => {
         if(!t.scattered && Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
           t.vx += (t.x - this.x) * 0.15; t.vy += (t.y - this.y) * 0.15;
@@ -107,7 +108,7 @@ class Cat {
     cats.forEach(other => { 
       if(other!==this && !other.isGrabbed && !busy && this.state !== 'chase_cat' && this.state !== 'chase_yarn' && this.state !== 'hide' && this.state !== 'cling'){ 
         const dx=this.x-other.x, dy=this.y-other.y, dist=Math.sqrt(dx*dx+dy*dy); 
-        if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.03) {
+        if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.02) {
           this.state = 'sniff'; other.state = 'sniff'; this.timer = 1500; other.timer = 1500; this.vx=0; other.vx=0;
           this.setEmo('❓'); other.setEmo('❓');
           
@@ -128,33 +129,36 @@ class Cat {
       } 
     });
 
-    if(this.state === 'wander' && Math.random() < 0.03 && this.type !== 'black' && this.type !== 'curly') {
+    if(this.state === 'wander' && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
-        if(f.t === 'bed' && Math.random()<0.3) { this.state = 'sleep_bed'; this.x = f.x; this.y = f.y-8; this.timer = 8000; this.setEmo('💤', 8000); }
-        else if(f.t === 'box' && Math.random()<0.3) { this.state = 'sit_box'; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
+        if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.x = f.x; this.y = f.y-8; this.timer = 8000; this.setEmo('💤', 8000); }
+        // 修正纸箱锁定坐标
+        else if(f.t === 'box' && Math.random()<0.4) { this.state = 'sit_box'; this.targetObj = f; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
         else if(f.t === 'tree' && Math.random()<0.4) { this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; }
         else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
-        else if(f.t === 'yarn' && Math.random()<0.4) { this.state = 'chase_yarn'; this.timer = 5000; }
+        else if(f.t === 'yarn' && Math.random()<0.5) { this.state = 'chase_yarn'; this.timer = 5000; }
       }
       if((weather === 'rain' || weather === 'snow') && Math.random()<0.3 && this.y < 380) {
         this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo(Math.random()<0.5?'♥':'♪', 2000);
       }
     }
     
-    // 橘猫翻肚皮
-    if(this.type === 'orange' && !busy && this.state === 'wander' && Math.random() < 0.002) {
+    // 橘猫翻肚皮概率提升
+    if(this.type === 'orange' && !busy && this.state === 'wander' && Math.random() < 0.01) {
       this.state = 'belly'; this.timer = 4000; this.vx = 0; this.vy = 0;
     }
 
+    // 奶牛猫跑酷概率提升
     if(this.type === 'cow' && !busy && this.state === 'wander') {
       if(this.timer<=0) {
-        if(Math.random()<0.2) { this.state='zoomies'; this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*3; this.timer=1500; this.setEmo('💢',1500); }
+        if(Math.random()<0.4) { this.state='zoomies'; this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*3; this.timer=1500; this.setEmo('💢',1500); }
         else { this.vx=(Math.random()-0.5)*1.5; this.vy=(Math.random()-0.5)*0.8; this.timer=1500; }
       }
     } else if(!busy && this.state === 'wander' && this.type !== 'curly' && this.type !== 'black') {
       if(this.timer<=0) {
-        if(Math.random()<0.3) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=3000; this.setEmo('💤', 3000); }
+        // 下调睡觉概率，让猫多活动
+        if(Math.random()<0.08) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=3000; this.setEmo('💤', 3000); }
         else { const a=Math.random()*Math.PI*2; this.vx=Math.cos(a)*1.2; this.vy=Math.sin(a)*0.6; this.timer=2000; }
       }
     }
@@ -169,7 +173,6 @@ class Cat {
   draw() {
     ctx.save(); 
     ctx.translate(this.x, this.y + this.climbY); 
-    // 黑猫放大1.5倍左右 (1.5 * 1.5 = 2.25)
     let currentScale = this.type === 'black' ? 2.25 : 1.5;
     ctx.scale(currentScale, currentScale);
     
@@ -257,7 +260,6 @@ class Cat {
       else { ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2); }
       if(this.type === 'cow') { ctx.fillStyle='#222'; ctx.fillRect(-9,-8,8,6); ctx.fillRect(1,-5,8,7); ctx.fillRect(-7,-15,5,5); }
       
-      // 雷达尾巴 or 普通尾巴
       let tailAngle = 0;
       if(this.type === 'grey') {
         tailAngle = Math.atan2((window.mouseY||H/2) - this.y, (window.mouseX||W/2) - this.x);
@@ -282,13 +284,20 @@ class GeminiBot {
     this.dir = 1; this.timer = 5000; this.rider = null;
     this.target = null; this.emo = '♪';
     this.emos = ['♥', '✨', '♪', '=_=', '>_<', '🤖'];
+    this.cleanMode = false;
   }
   update(dt, cats, trashes) {
     this.timer -= dt;
 
-    if(this.state === 'idle' && this.timer <= 0) {
-      this.state = 'sweep'; this.dir = Math.random()<0.5?1:-1; 
-      this.timer = 20000; this.emo = this.emos[Math.floor(Math.random()*this.emos.length)];
+    if(this.state === 'idle') {
+      let unread = trashes.filter(t => !t.isGolden);
+      // 当垃圾超过8个触发紧急大扫除模式
+      if(unread.length >= 8 || this.timer <= 0) {
+        this.state = 'sweep'; this.dir = Math.random()<0.5?1:-1; 
+        this.cleanMode = unread.length >= 8;
+        this.timer = this.cleanMode ? 99999 : 20000; 
+        this.emo = this.emos[Math.floor(Math.random()*this.emos.length)];
+      }
     }
 
     if(this.state === 'sweep') {
@@ -298,7 +307,6 @@ class GeminiBot {
       if(!this.rider && whiteCat && Math.abs(whiteCat.x - this.x) < 80 && Math.abs(whiteCat.y - this.y) < 50) {
         this.state = 'wait'; this.timer = 3000; this.emo = '♥';
       }
-      // 狂暴概率大幅下调至 0.002
       else if(cowCat && cowCat.state === 'zoomies' && Math.abs(cowCat.y - this.y) < 80 && Math.random()<0.002) {
         this.state = 'frenzy'; this.target = cowCat; this.emo = '💢';
       }
@@ -313,8 +321,19 @@ class GeminiBot {
         cats.forEach(c => { if(c.state==='in_bin' && c.targetObj===bin) { c.state='wander'; c.y+=20; c.setEmo('❓',1000); } });
       }
 
-      trashes.forEach(t=>{ if(t.scattered && Math.abs(t.y-this.y)<40) t.pieces = t.pieces.filter(p=>Math.abs(p.x-this.x)>30); });
-      if(this.timer <= 0) { this.state='idle'; this.rider=null; this.timer=8000; this.emo='💤'; trashes=trashes.filter(t=>!t.scattered || t.pieces.length>0); }
+      // 吃垃圾逻辑
+      trashes.forEach(t => {
+        if(Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
+          t.eaten = true; this.emo = '✨';
+        }
+      });
+      
+      let remain = trashes.filter(t => !t.eaten);
+      if (this.cleanMode && remain.length <= 3) {
+        this.state = 'idle'; this.cleanMode = false; this.timer = 8000; this.emo = '💤';
+      } else if (!this.cleanMode && this.timer <= 0) {
+        this.state='idle'; this.rider=null; this.timer=8000; this.emo='💤'; 
+      }
     }
     else if(this.state === 'wait') {
       if(this.timer <= 0) { this.state = 'sweep'; this.emo = '♪'; }
