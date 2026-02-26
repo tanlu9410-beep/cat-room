@@ -21,6 +21,7 @@ class Cat {
     this.timer -= dt;
     let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
     
+    // 强制猫咪面向被交互的物体
     if (this.state === 'scratch_tree' && this.targetObj) {
         this.vx = this.x > this.targetObj.x ? -1 : 1;
     }
@@ -55,7 +56,8 @@ class Cat {
 
          if (Math.random() < rejectProb) {
              gemini.emo = '💢'; 
-             gemini.vx = (gemini.x > this.x ? 1 : -1) * 2; 
+             // 核心修复：把拒载弹开的速度从 2 降回 0.15，防止变成飙车发癫器
+             gemini.vx = (gemini.x > this.x ? 1 : -1) * 0.15; 
              this.vx = (this.x > gemini.x ? 1 : -1) * 3; 
              this.setEmo('❓', 1000);
          } else {
@@ -110,7 +112,7 @@ class Cat {
         this.targetObj.state = 'up'; 
         this.state = 'wander'; 
         this.y += 20; 
-        this.x += 60; // 核心修复：给足距离彻底逃出垃圾桶吸附判定圈
+        this.x += 60; // 给足距离彻底逃出垃圾桶吸附判定圈
         this.timer = 3000; 
         this.setEmo('😵', 1500); 
       } else {
@@ -179,7 +181,6 @@ class Cat {
       }
     }
 
-    // 核心修复：解除 timer 限制，家具判定重现江湖
     if(this.state === 'wander' && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
