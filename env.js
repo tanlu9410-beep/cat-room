@@ -126,13 +126,13 @@ function drawFurnitures() {
       ctx.fillStyle='#658bad'; ctx.beginPath(); ctx.ellipse(0,-6, 20, 9, 0, 0, Math.PI*2); ctx.fill();
     } else if(f.t === 'box') {
       if(!f.isGrabbed) drawShadow(25, 12);
-      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-15,40,30); // 整体外壳
-      ctx.fillStyle='#604830'; ctx.fillRect(-16,-12,32,24); // 顶部黑洞（开口朝上）
-      ctx.fillStyle='#a8855e'; 
-      ctx.fillRect(-20,-20,40,5); // 后翻盖
-      ctx.fillRect(-20,15,40,5);  // 前翻盖
-      ctx.fillRect(-25,-15,5,30); // 左翻盖
-      ctx.fillRect(20,-15,5,30);  // 右翻盖
+      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-5,40,25); 
+      ctx.fillStyle='#503c28'; ctx.fillRect(-20,-18,40,13); 
+      ctx.fillStyle='#9e7a54'; 
+      ctx.fillRect(-20,-24,40,6); 
+      ctx.fillRect(-20,-5,40,6);  
+      ctx.fillRect(-26,-18,6,13); 
+      ctx.fillRect(20,-18,6,13);  
     } else if(f.t === 'tree') {
       if(!f.isGrabbed) drawShadow(25, 12);
       ctx.fillStyle='#9e8d73'; ctx.fillRect(-20,5,40,8);
