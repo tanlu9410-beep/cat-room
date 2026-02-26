@@ -29,7 +29,7 @@ class Cat {
     if(this.state === 'climb' && this.targetObj) {
       this.x = this.targetObj.x; 
       this.climbY -= 0.05 * dt; 
-      // 修复猫爬架悬空：偏移量调整为-65
+      // 修正偏移，不再悬空
       if(this.climbY <= -65) { this.climbY = -65; this.state = 'sit_tree'; this.timer = 8000; }
       return;
     }
@@ -67,7 +67,6 @@ class Cat {
       }
     }
     
-    // 白猫推垃圾概率拉高
     if(this.type === 'white' && this.state === 'wander' && Math.random() < 0.2) {
       trashes.forEach(t => {
         if(!t.scattered && Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
@@ -133,8 +132,7 @@ class Cat {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
         if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.x = f.x; this.y = f.y-8; this.timer = 8000; this.setEmo('💤', 8000); }
-        // 修正纸箱锁定坐标
-        else if(f.t === 'box' && Math.random()<0.4) { this.state = 'sit_box'; this.targetObj = f; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
+        else if(f.t === 'box' && Math.random()<0.5) { this.state = 'sit_box'; this.targetObj = f; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
         else if(f.t === 'tree' && Math.random()<0.4) { this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; }
         else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
         else if(f.t === 'yarn' && Math.random()<0.5) { this.state = 'chase_yarn'; this.timer = 5000; }
@@ -144,12 +142,10 @@ class Cat {
       }
     }
     
-    // 橘猫翻肚皮概率提升
     if(this.type === 'orange' && !busy && this.state === 'wander' && Math.random() < 0.01) {
       this.state = 'belly'; this.timer = 4000; this.vx = 0; this.vy = 0;
     }
 
-    // 奶牛猫跑酷概率提升
     if(this.type === 'cow' && !busy && this.state === 'wander') {
       if(this.timer<=0) {
         if(Math.random()<0.4) { this.state='zoomies'; this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*3; this.timer=1500; this.setEmo('💢',1500); }
@@ -157,7 +153,6 @@ class Cat {
       }
     } else if(!busy && this.state === 'wander' && this.type !== 'curly' && this.type !== 'black') {
       if(this.timer<=0) {
-        // 下调睡觉概率，让猫多活动
         if(Math.random()<0.08) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=3000; this.setEmo('💤', 3000); }
         else { const a=Math.random()*Math.PI*2; this.vx=Math.cos(a)*1.2; this.vy=Math.sin(a)*0.6; this.timer=2000; }
       }
@@ -285,17 +280,20 @@ class GeminiBot {
     this.target = null; this.emo = '♪';
     this.emos = ['♥', '✨', '♪', '=_=', '>_<', '🤖'];
     this.cleanMode = false;
+    this.leaving = false;
   }
   update(dt, cats, trashes) {
     this.timer -= dt;
 
     if(this.state === 'idle') {
-      let unread = trashes.filter(t => !t.isGolden);
-      // 当垃圾超过8个触发紧急大扫除模式
+      let unread = trashes.filter(t => !t.isGolden && !t.eaten);
       if(unread.length >= 8 || this.timer <= 0) {
         this.state = 'sweep'; this.dir = Math.random()<0.5?1:-1; 
         this.cleanMode = unread.length >= 8;
         this.timer = this.cleanMode ? 99999 : 20000; 
+        this.leaving = false;
+        // 从屏幕外入场
+        if (this.x < 0 || this.x > W) this.x = this.dir > 0 ? -40 : W+40;
         this.emo = this.emos[Math.floor(Math.random()*this.emos.length)];
       }
     }
@@ -311,28 +309,39 @@ class GeminiBot {
         this.state = 'frenzy'; this.target = cowCat; this.emo = '💢';
       }
 
-      this.x += this.dir * (this.rider ? 0.08 : 0.12) * dt;
-      if(this.x < 50) { this.x = 50; this.dir = 1; this.emo = this.emos[Math.floor(Math.random()*this.emos.length)]; }
-      if(this.x > W-50) { this.x = W-50; this.dir = -1; this.emo = this.emos[Math.floor(Math.random()*this.emos.length)]; }
+      this.x += this.dir * (this.rider ? 0.08 : 0.15) * dt;
+
+      // 扩大清扫盲区，只要横坐标扫过，Y轴方向的垃圾全吸走
+      trashes.forEach(t => {
+        if(!t.eaten && Math.abs(t.x - this.x) < 50 && Math.abs(t.y - this.y) < 200) {
+          t.eaten = true; this.emo = '✨';
+        }
+      });
 
       let bin = furnitures.find(f => f.t === 'bin');
-      if(bin && bin.state === 'down' && Math.abs(this.x - bin.x) < 60 && Math.abs(this.y - bin.y) < 40) {
+      if(bin && bin.state === 'down' && Math.abs(this.x - bin.x) < 60 && Math.abs(this.y - bin.y) < 200) {
         bin.state = 'up'; this.emo = '✨';
         cats.forEach(c => { if(c.state==='in_bin' && c.targetObj===bin) { c.state='wander'; c.y+=20; c.setEmo('❓',1000); } });
       }
 
-      // 吃垃圾逻辑
-      trashes.forEach(t => {
-        if(Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
-          t.eaten = true; this.emo = '✨';
-        }
-      });
+      let remain = trashes.filter(t => !t.eaten && !t.isGolden);
       
-      let remain = trashes.filter(t => !t.eaten);
       if (this.cleanMode && remain.length <= 3) {
-        this.state = 'idle'; this.cleanMode = false; this.timer = 8000; this.emo = '💤';
+        this.cleanMode = false;
+        this.leaving = true; // 扫干净了准备退场
       } else if (!this.cleanMode && this.timer <= 0) {
-        this.state='idle'; this.rider=null; this.timer=8000; this.emo='💤'; 
+        this.leaving = true;
+      }
+
+      if (this.leaving) {
+        // 退场时不折返，直接开出屏幕
+        if(this.x < -60 || this.x > W+60) {
+          this.state = 'idle'; this.rider = null; this.timer = 8000; this.emo = '💤';
+        }
+      } else {
+        // 扫地折返，并上下切换轨道
+        if(this.x < 50) { this.x = 50; this.dir = 1; if(this.cleanMode) this.y = 380 + Math.random()*(H-420); }
+        if(this.x > W-50) { this.x = W-50; this.dir = -1; if(this.cleanMode) this.y = 380 + Math.random()*(H-420); }
       }
     }
     else if(this.state === 'wait') {
