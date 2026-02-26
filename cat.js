@@ -19,7 +19,7 @@ class Cat {
     } else { this.riding = false; }
 
     this.timer -= dt;
-    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom'].includes(this.state);
+    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly'].includes(this.state);
     if(busy && this.timer <= 0) {
       if(this.state === 'in_bin' && this.targetObj) this.y += 30; 
       if(this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
@@ -64,6 +64,15 @@ class Cat {
           else { this.vx = (dx/dist)*1.5; this.vy = (dy/dist)*1.5; } 
         }
       }
+    }
+    
+    // 白猫推垃圾
+    if(this.type === 'white' && this.state === 'wander' && Math.random() < 0.1) {
+      trashes.forEach(t => {
+        if(!t.scattered && Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
+          t.vx += (t.x - this.x) * 0.15; t.vy += (t.y - this.y) * 0.15;
+        }
+      });
     }
 
     if(this.state === 'in_bin' && this.targetObj && this.targetObj.state === 'down') {
@@ -132,6 +141,11 @@ class Cat {
         this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo(Math.random()<0.5?'♥':'♪', 2000);
       }
     }
+    
+    // 橘猫翻肚皮
+    if(this.type === 'orange' && !busy && this.state === 'wander' && Math.random() < 0.002) {
+      this.state = 'belly'; this.timer = 4000; this.vx = 0; this.vy = 0;
+    }
 
     if(this.type === 'cow' && !busy && this.state === 'wander') {
       if(this.timer<=0) {
@@ -155,10 +169,14 @@ class Cat {
   draw() {
     ctx.save(); 
     ctx.translate(this.x, this.y + this.climbY); 
-    ctx.scale(1.5, 1.5);
+    // 黑猫放大1.5倍左右 (1.5 * 1.5 = 2.25)
+    let currentScale = this.type === 'black' ? 2.25 : 1.5;
+    ctx.scale(currentScale, currentScale);
     
     if(this.state === 'window' || this.state === 'climb') { } 
-    else if(this.vx<0 && !this.isGrabbed && this.state !== 'in_bin') ctx.scale(-1,1);
+    else if(this.vx<0 && !this.isGrabbed && this.state !== 'in_bin' && this.state !== 'belly') ctx.scale(-1,1);
+    
+    if(this.state === 'belly') { ctx.scale(1,-1); ctx.translate(0, 4); }
     
     if(this.emo && !this.isGrabbed) { 
       ctx.save(); ctx.scale(this.vx<0?-1:1, 1); 
@@ -238,8 +256,19 @@ class Cat {
       if(this.state==='groom') { ctx.fillRect(-4,-11,3,1); ctx.fillRect(4,-11,3,1); } 
       else { ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2); }
       if(this.type === 'cow') { ctx.fillStyle='#222'; ctx.fillRect(-9,-8,8,6); ctx.fillRect(1,-5,8,7); ctx.fillRect(-7,-15,5,5); }
+      
+      // 雷达尾巴 or 普通尾巴
+      let tailAngle = 0;
+      if(this.type === 'grey') {
+        tailAngle = Math.atan2((window.mouseY||H/2) - this.y, (window.mouseX||W/2) - this.x);
+        if(this.vx<0 && !this.isGrabbed) tailAngle = Math.PI - tailAngle; 
+      } else {
+        tailAngle = Math.sin(Date.now()*0.005)*0.5;
+      }
       ctx.fillStyle = this.c.body;
-      ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
+      ctx.save(); ctx.translate(-6, -2); ctx.rotate(tailAngle);
+      ctx.fillRect(-8, -1, 8, 3); ctx.restore();
+      
       ctx.restore();
     }
     ctx.restore();
@@ -269,7 +298,8 @@ class GeminiBot {
       if(!this.rider && whiteCat && Math.abs(whiteCat.x - this.x) < 80 && Math.abs(whiteCat.y - this.y) < 50) {
         this.state = 'wait'; this.timer = 3000; this.emo = '♥';
       }
-      else if(cowCat && cowCat.state === 'zoomies' && Math.abs(cowCat.y - this.y) < 80 && Math.random()<0.01) {
+      // 狂暴概率大幅下调至 0.002
+      else if(cowCat && cowCat.state === 'zoomies' && Math.abs(cowCat.y - this.y) < 80 && Math.random()<0.002) {
         this.state = 'frenzy'; this.target = cowCat; this.emo = '💢';
       }
 
