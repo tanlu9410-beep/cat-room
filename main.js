@@ -109,7 +109,7 @@ canvas.addEventListener('mousedown', e => {
       return; 
     } else {
       if(Math.random() < 0.15) { 
-        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = ''; // 删掉原本的文本Emoji
+        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = ''; 
         if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
         return;
       } else { 
@@ -132,7 +132,7 @@ canvas.addEventListener('mousedown', e => {
     }
   }
 
-  // 第三层级：纸团（提权至家具之前，防止被遮挡）
+  // 第三层级：纸团
   const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
   if(clickedTrash) {
     const lib = clickedTrash.isGolden ? goldenLibrary : trashLibrary;
@@ -154,7 +154,7 @@ canvas.addEventListener('mousedown', e => {
     card.style.left = cardLeft + 'px';
     card.style.top = cardTop + 'px';
     cardTimeout = setTimeout(()=>card.style.display='none', 5000);
-    return; // 点击纸团后直接阻断穿透
+    return; 
   }
 
   // 第四层级：家具
@@ -170,48 +170,50 @@ canvas.addEventListener('mousedown', e => {
 
 window.addEventListener('mouseup', e => { 
   if(grabbedObj) { 
+    // 核心修复：把猫存进独立变量，防止后续 setTimeout 丢失数据
+    let droppedEntity = grabbedObj; 
     grabbedObj.isGrabbed = false; 
+    grabbedObj = null; 
     
-    if(grabbedObj instanceof GeminiBot) {
-       grabbedObj.state = 'idle'; grabbedObj.timer = 2000;
+    if(droppedEntity instanceof GeminiBot) {
+       droppedEntity.state = 'idle'; droppedEntity.timer = 2000;
     }
-    else if(grabbedObj instanceof Cat) {
-      grabbedObj.state = 'wander'; 
-      grabbedObj.climbY = 0; 
-      grabbedObj.timer = 1500; 
+    else if(droppedEntity instanceof Cat) {
+      droppedEntity.state = 'wander'; 
+      droppedEntity.climbY = 0; 
+      droppedEntity.timer = 1500; 
       
       let closest = null; let minDist = 60;
       let busyStates = ['sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'scratch_tree', 'sniff', 'groom', 'chase_cat'];
       
       cats.forEach(other => {
-        if(other !== grabbedObj && !other.isGrabbed && !busyStates.includes(other.state)) {
-           let d = Math.hypot(grabbedObj.x - other.x, grabbedObj.y - other.y);
+        if(other !== droppedEntity && !other.isGrabbed && !busyStates.includes(other.state)) {
+           let d = Math.hypot(droppedEntity.x - other.x, droppedEntity.y - other.y);
            if(d < minDist) { minDist = d; closest = other; }
         }
       });
       
       if(closest) {
-         grabbedObj.state = 'sniff'; closest.state = 'sniff';
-         grabbedObj.timer = 1500; closest.timer = 1500;
-         grabbedObj.setEmo('❓'); closest.setEmo('❓');
+         droppedEntity.state = 'sniff'; closest.state = 'sniff';
+         droppedEntity.timer = 1500; closest.timer = 1500;
+         droppedEntity.setEmo('❓'); closest.setEmo('❓');
          
          setTimeout(() => {
-            if(!grabbedObj.isGrabbed && !closest.isGrabbed) {
+            if(!droppedEntity.isGrabbed && !closest.isGrabbed) {
                if(Math.random() < 0.5) {
-                  grabbedObj.state = 'groom'; closest.state = 'groom';
-                  grabbedObj.timer = 4000; closest.timer = 4000;
-                  grabbedObj.x = closest.x - 15; grabbedObj.y = closest.y;
-                  grabbedObj.vx = -1; closest.vx = 1;
-                  grabbedObj.setEmo('♥', 3000); closest.setEmo('♥', 3000);
+                  droppedEntity.state = 'groom'; closest.state = 'groom';
+                  droppedEntity.timer = 4000; closest.timer = 4000;
+                  droppedEntity.x = closest.x - 15; droppedEntity.y = closest.y;
+                  droppedEntity.vx = -1; closest.vx = 1;
+                  droppedEntity.setEmo('♥', 3000); closest.setEmo('♥', 3000);
                } else {
-                  grabbedObj.state = 'chase_cat'; grabbedObj.targetObj = closest;
-                  grabbedObj.timer = 3000; grabbedObj.setEmo('💢', 1000);
+                  droppedEntity.state = 'chase_cat'; droppedEntity.targetObj = closest;
+                  droppedEntity.timer = 3000; droppedEntity.setEmo('💢', 1000);
                   closest.state = 'wander'; closest.vx = (Math.random()-0.5)*5; closest.vy = (Math.random()-0.5)*5;
                }
             }
          }, 1500);
       }
     }
-    grabbedObj = null; 
   } 
 });
