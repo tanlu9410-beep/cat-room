@@ -7,12 +7,6 @@ function getMousePos(e) {
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
 
-window.addEventListener('mousemove', e => { 
-  const pos = getMousePos(e); 
-  window.mouseX = pos.x; 
-  window.mouseY = pos.y; 
-});
-
 const cats = [
   new Cat('white', W/2-100, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
   new Cat('grey', W/2-50, {body:'#9e968d', ear:'#827a70', eye:'#4a6b82'}),
@@ -84,13 +78,20 @@ canvas.addEventListener('mousedown', e => {
   
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
-    // 黑猫点击判定范围稍大
     let hitRadius = c.type === 'black' ? 60 : 40;
-    if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
+    if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { 
+      grabbedObj = c; c.isGrabbed = true; c.riding = false; 
+      e.preventDefault(); // 关键补丁：阻止浏览器原生选中
+      return; 
+    }
   }
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
-    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; return; }
+    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
+      grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
+      e.preventDefault(); // 关键补丁：阻止浏览器原生选中
+      return; 
+    }
   }
   const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
   if(clickedTrash) {
@@ -115,6 +116,28 @@ canvas.addEventListener('mousedown', e => {
   }
 });
 
+// 全局合并鼠标移动监听，保证拖拽极度丝滑
+window.addEventListener('mousemove', e => { 
+  const pos = getMousePos(e);
+  window.mouseX = pos.x; 
+  window.mouseY = pos.y; 
+
+  if(grabbedObj) { 
+    if(grabbedObj.ox !== undefined) { 
+      grabbedObj.x = pos.x + grabbedObj.ox; 
+      grabbedObj.y = pos.y + grabbedObj.oy; 
+    } else { 
+      grabbedObj.x = pos.x; 
+      grabbedObj.y = pos.y; 
+      grabbedObj.climbY = 0; // 猫被抓起时脱离Z轴
+    }
+  } 
+});
+
 window.addEventListener('mouseup', e => { 
-  if(grabbedObj) { grabbedObj.isGrabbed = false; if(grabbedObj.state) grabbedObj.state = 'wander'; grabbedObj = null; } 
+  if(grabbedObj) { 
+    grabbedObj.isGrabbed = false; 
+    if(grabbedObj.state) grabbedObj.state = 'wander'; 
+    grabbedObj = null; 
+  } 
 });
