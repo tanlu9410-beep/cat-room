@@ -55,13 +55,13 @@ function loop(ts) {
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
     
-    if(a.t === 'bed' || a.t === 'tree' || a.t === 'box') ay -= 5;
-    if(b.t === 'bed' || b.t === 'tree' || b.t === 'box') by -= 5;
+    if(a.t === 'bed') ay -= 25; else if (a.t === 'tree' || a.t === 'box') ay -= 5;
+    if(b.t === 'bed') by -= 25; else if (b.t === 'tree' || b.t === 'box') by -= 5;
 
-    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(a.state) && a.targetObj) {
+    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(a.state) && a.targetObj) {
       ay = a.targetObj.y + 1; 
     }
-    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin'].includes(b.state) && b.targetObj) {
+    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(b.state) && b.targetObj) {
       by = b.targetObj.y + 1;
     }
     
@@ -96,11 +96,9 @@ canvas.addEventListener('mousedown', e => {
   card.style.display = 'none';
   if(cardTimeout) clearTimeout(cardTimeout);
   
-  // 核心修复：点击扫地机的多重判定（解救/踢倒/吐纸团）
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
     if(gemini.state === 'stuck' || gemini.state === 'frenzy') {
       gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '=_='; 
-      // 吐出金色纸团，保持上限4个
       let golds = trashes.filter(t => t.isGolden);
       if(golds.length >= 4) {
          let idx = trashes.findIndex(t => t.isGolden);
@@ -109,8 +107,7 @@ canvas.addEventListener('mousedown', e => {
       trashes.push(new Trash(gemini.x, gemini.y+10, 0, -2, true));
       return; 
     } else {
-      // 正常状态被点击，强制宕机（踢倒）
-      gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = '×_×';
+      gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = '😵';
       if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
       return;
     }
