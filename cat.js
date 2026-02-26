@@ -41,7 +41,7 @@ class Cat {
       return; 
     }
 
-    // 修复：更聪明的全员上车与拒载逻辑
+    // 修复：全员上车与拒载逻辑
     if(gemini.state === 'sweep' && !this.riding && !gemini.rider && !busy && Math.abs(gemini.x - this.x) < 80 && Math.abs(gemini.y - this.y) < 60) {
       if(Math.random()<0.05) { 
          let rejectProb = 0;
@@ -247,7 +247,8 @@ class Cat {
       ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-20,4,5); ctx.fillRect(1,-20,4,5);
       ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-13,2,2); ctx.fillRect(2,-13,2,2);
       ctx.fillStyle = this.c.body;
-      ctx.save(); ctx.translate(16, 0); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(0,0,12,4); ctx.restore(); 
+      // 尾巴下移并塞进阴影里，防止越界盖住箱子
+      ctx.save(); ctx.translate(10, -8); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(0,0,8,3); ctx.restore(); 
     } else if(this.state === 'sleep_bed' || this.state === 'sit_tree' || this.state === 'sleep') {
       ctx.fillRect(-10,-5,20,12); ctx.fillRect(-8,-12,12,10);
       ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-16,4,5); ctx.fillRect(3,-16,4,5);
@@ -292,12 +293,13 @@ class Cat {
       ctx.fillStyle = this.c.body;
       ctx.save(); ctx.translate(4, 2); ctx.rotate(-Math.PI/4); ctx.fillRect(0, -10, 4, 12); ctx.restore();
     } else if(this.state === 'scratch_tree') {
-      ctx.fillRect(-6,-16,12,18); 
-      ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-20,4,5); ctx.fillRect(2,-20,4,5);
+      // 真正的伸展猫条，并且向下覆盖
+      ctx.fillRect(-7,-22,14,24); 
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-26,4,5); ctx.fillRect(2,-26,4,5);
       const scratch = Math.sin(Date.now()*0.02)*4;
       ctx.fillStyle = this.c.body;
-      ctx.fillRect(-8, -8 + scratch, 4, 6);
-      ctx.fillRect(4, -8 - scratch, 4, 6);
+      ctx.fillRect(-9, -14 + scratch, 4, 6);
+      ctx.fillRect(5, -14 - scratch, 4, 6);
     } else {
       ctx.save();
       if(this.state === 'groom') ctx.translate(0, Math.sin(Date.now()*0.01)*1.5);
@@ -338,8 +340,10 @@ class GeminiBot {
     this.emos = ['♥', '✨', '♪', '=_=', '>_<', '🤖'];
     this.cleanMode = false;
     this.frenzyCooldown = 0;
+    this.isGrabbed = false;
   }
   update(dt, cats, trashes) {
+    if(this.isGrabbed) return;
     this.timer -= dt;
     this.frenzyCooldown -= dt;
     let unread = trashes.filter(t => !t.isGolden && !t.eaten);
@@ -353,6 +357,9 @@ class GeminiBot {
         let speed = 0.12; 
         this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed * 0.5;
         this.emo = this.emos[Math.floor(Math.random()*this.emos.length)];
+      }
+      if(Math.random() < 0.0002 * dt) {
+        this.state = 'stuck'; this.timer = 4000; this.emo = 'X(';
       }
     }
 
@@ -370,7 +377,7 @@ class GeminiBot {
         this.frenzyCooldown = 5000; 
       }
 
-      let speedMult = this.rider ? 0.6 : 1;
+      let speedMult = this.rider ? 0.4 : 1; 
       this.x += this.vx * speedMult * dt;
       this.y += this.vy * speedMult * dt;
 
@@ -427,7 +434,13 @@ class GeminiBot {
   
   draw() {
     ctx.save(); ctx.translate(this.x,this.y); ctx.scale(2.0, 2.0); 
-    drawShadow(16, 6);
+    
+    if(this.isGrabbed) {
+      drawShadow(16, 6);
+      ctx.translate(0, -10 + Math.sin(Date.now() * 0.05) * 2);
+    } else {
+      drawShadow(16, 6);
+    }
     
     if(this.state === 'stuck') {
       ctx.rotate(Math.PI / 2); 
