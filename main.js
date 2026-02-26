@@ -96,7 +96,7 @@ canvas.addEventListener('mousedown', e => {
   card.style.display = 'none';
   if(cardTimeout) clearTimeout(cardTimeout);
   
-  // 扫地机交互：可以搬运，也有小概率直接被你点翻车
+  // 第一层级：扫地机器人
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
     if(gemini.state === 'stuck' || gemini.state === 'frenzy') {
       gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '=_='; 
@@ -108,11 +108,11 @@ canvas.addEventListener('mousedown', e => {
       trashes.push(new Trash(gemini.x, gemini.y+10, 0, -2, true));
       return; 
     } else {
-      if(Math.random() < 0.15) { // 15%概率平地摔
-        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = 'X(';
+      if(Math.random() < 0.15) { 
+        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = ''; // 删掉原本的文本Emoji
         if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
         return;
-      } else { // 85%概率被拖拽搬运
+      } else { 
         grabbedObj = gemini; gemini.isGrabbed = true; gemini.ox = gemini.x - pos.x; gemini.oy = gemini.y - pos.y;
         if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
         e.preventDefault(); 
@@ -121,6 +121,7 @@ canvas.addEventListener('mousedown', e => {
     }
   }
   
+  // 第二层级：猫
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
     let hitRadius = c.type === 'black' || c.type === 'grey' ? 60 : 40;
@@ -130,15 +131,8 @@ canvas.addEventListener('mousedown', e => {
       return; 
     }
   }
-  for(let i=furnitures.length-1; i>=0; i--) {
-    let f = furnitures[i];
-    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
-      grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
-      e.preventDefault(); 
-      return; 
-    }
-  }
-  
+
+  // 第三层级：纸团（提权至家具之前，防止被遮挡）
   const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
   if(clickedTrash) {
     const lib = clickedTrash.isGolden ? goldenLibrary : trashLibrary;
@@ -160,6 +154,17 @@ canvas.addEventListener('mousedown', e => {
     card.style.left = cardLeft + 'px';
     card.style.top = cardTop + 'px';
     cardTimeout = setTimeout(()=>card.style.display='none', 5000);
+    return; // 点击纸团后直接阻断穿透
+  }
+
+  // 第四层级：家具
+  for(let i=furnitures.length-1; i>=0; i--) {
+    let f = furnitures[i];
+    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
+      grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
+      e.preventDefault(); 
+      return; 
+    }
   }
 });
 
@@ -173,13 +178,12 @@ window.addEventListener('mouseup', e => {
     else if(grabbedObj instanceof Cat) {
       grabbedObj.state = 'wander'; 
       grabbedObj.climbY = 0; 
-      grabbedObj.timer = 1500; // 强制留出1.5秒寻路时间，防止它落地就直接睡着
+      grabbedObj.timer = 1500; 
       
       let closest = null; let minDist = 60;
       let busyStates = ['sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'scratch_tree', 'sniff', 'groom', 'chase_cat'];
       
       cats.forEach(other => {
-        // 核心修复：绝对不打扰正在忙（比如爬树、趴窝）的猫
         if(other !== grabbedObj && !other.isGrabbed && !busyStates.includes(other.state)) {
            let d = Math.hypot(grabbedObj.x - other.x, grabbedObj.y - other.y);
            if(d < minDist) { minDist = d; closest = other; }
