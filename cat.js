@@ -21,7 +21,6 @@ class Cat {
     this.timer -= dt;
     let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
     
-    // 强制猫咪面向被交互的物体
     if (this.state === 'scratch_tree' && this.targetObj) {
         this.vx = this.x > this.targetObj.x ? -1 : 1;
     }
@@ -111,8 +110,8 @@ class Cat {
         this.targetObj.state = 'up'; 
         this.state = 'wander'; 
         this.y += 20; 
-        this.x += 30; // 强制弹开距离
-        this.timer = 3000; // 强制冷却
+        this.x += 60; // 核心修复：给足距离彻底逃出垃圾桶吸附判定圈
+        this.timer = 3000; 
         this.setEmo('😵', 1500); 
       } else {
         if(Math.random()<0.02) trashes.push(new Trash(this.x+20, this.y, 2, -2));
@@ -180,8 +179,8 @@ class Cat {
       }
     }
 
-    // 核心修复：必须 timer <= 0 才允许判定触发，杜绝无限卡死
-    if(this.state === 'wander' && this.timer <= 0 && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
+    // 核心修复：解除 timer 限制，家具判定重现江湖
+    if(this.state === 'wander' && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
         if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
@@ -192,8 +191,8 @@ class Cat {
                 this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; 
             } else if (catsOnTree === 1) {
                 this.state = 'scratch_tree'; this.targetObj = f; this.timer = 4000; 
-                this.x = f.x + (Math.random() < 0.5 ? 20 : -20); // 分开身位
-                this.y = f.y + 10; // 紧贴爬架底座
+                this.x = f.x + (Math.random() < 0.5 ? 20 : -20); 
+                this.y = f.y + 10; 
             }
         }
         else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
@@ -302,7 +301,6 @@ class Cat {
       ctx.fillStyle = this.c.body;
       ctx.save(); ctx.translate(4, 2); ctx.rotate(-Math.PI/4); ctx.fillRect(0, -10, 4, 12); ctx.restore();
     } else if(this.state === 'scratch_tree') {
-      // 伸展开的长长猫体
       ctx.fillRect(-7,-28,14,30); 
       ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-32,4,5); ctx.fillRect(2,-32,4,5);
       const scratch = Math.sin(Date.now()*0.02)*4;
@@ -368,7 +366,7 @@ class GeminiBot {
         this.emo = this.emos[Math.floor(Math.random()*this.emos.length)];
       }
       if(Math.random() < 0.0002 * dt) {
-        this.state = 'stuck'; this.timer = 4000; this.emo = ''; // 跌倒不再冒文本框
+        this.state = 'stuck'; this.timer = 4000; this.emo = '';
       }
     }
 
@@ -390,7 +388,6 @@ class GeminiBot {
       this.x += this.vx * speedMult * dt;
       this.y += this.vy * speedMult * dt;
 
-      // 核心修复：用绝对值控制撞墙反弹，彻底杜绝高速抽搐
       if(this.x <= 50) { this.x = 50; this.vx = Math.abs(this.vx); }
       if(this.x >= W-50) { this.x = W-50; this.vx = -Math.abs(this.vx); }
       if(this.y <= 350) { this.y = 350; this.vy = Math.abs(this.vy); }
@@ -426,7 +423,7 @@ class GeminiBot {
       if(this.x <= 50 || this.x >= W-50 || this.y <= 350 || this.y >= H-40) {
         this.x = Math.max(50, Math.min(W-50, this.x));
         this.y = Math.max(350, Math.min(H-40, this.y));
-        this.state = 'stuck'; this.timer = 30000; this.emo = ''; // 撞晕不冒字
+        this.state = 'stuck'; this.timer = 30000; this.emo = ''; 
       }
     }
     else if(this.state === 'stuck') {
@@ -467,13 +464,10 @@ class GeminiBot {
 
     ctx.fillStyle='#5ba4d4'; ctx.fillRect(-10,-10,20,16); ctx.fillStyle='#d0eeff'; ctx.fillRect(-7,-8,14,8);
     
-    // 核心重绘：机器人的小脸蛋
     if (this.state === 'stuck') {
       ctx.strokeStyle = '#ff0000'; ctx.lineWidth = 1.5;
-      // 痛苦面具眼
       ctx.beginPath(); ctx.moveTo(-5,-6); ctx.lineTo(-2,-3); ctx.moveTo(-2,-6); ctx.lineTo(-5,-3); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(2,-6); ctx.lineTo(5,-3); ctx.moveTo(5,-6); ctx.lineTo(2,-3); ctx.stroke();
-      // 晕乎乎小嘴
       ctx.beginPath(); ctx.arc(0, -1, 2, 0, Math.PI, true); ctx.stroke(); 
     } else {
       ctx.fillStyle=(this.state==='frenzy')?'#ff0000':'#2060a0'; 
@@ -485,7 +479,6 @@ class GeminiBot {
     
     ctx.scale(dir<0?-1:1, 1);
     
-    // 劫持判定：摔倒时绝对不绘制文字框
     if (this.emo && this.state !== 'stuck') {
       let emoY = this.rider ? -35 : -15;
       ctx.fillStyle='rgba(60,130,200,0.9)'; ctx.font='bold 10px sans-serif'; 
