@@ -22,7 +22,7 @@ class Cat {
     let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
     if(busy && this.timer <= 0) {
       if(this.state === 'in_bin' && this.targetObj) this.y += 30; 
-      if(this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('sleep', 5000); }
+      if(this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
       else if(this.state !== 'sit_tree') { this.state = 'wander'; this.targetObj = null; this.climbY = 0; }
     }
 
@@ -37,7 +37,7 @@ class Cat {
       return;
     }
     if(this.state === 'sit_tree') {
-      if(Math.random()<0.01 && this.timer % 2000 < 50) this.setEmo(Math.random()<0.5?'heart':'note', 1000);
+      if(Math.random()<0.01 && this.timer % 2000 < 50) this.setEmo(Math.random()<0.5?'❤️':'✨', 1000);
       return; 
     }
 
@@ -49,10 +49,10 @@ class Cat {
          else if (this.type === 'curly') rejectProb = 0.1;
 
          if (Math.random() < rejectProb) {
-             gemini.emo = 'angry'; 
+             gemini.emo = '😠'; 
              gemini.vx = (gemini.x > this.x ? 1 : -1) * 2; 
              this.vx = (this.x > gemini.x ? 1 : -1) * 3; 
-             this.setEmo('question', 1000);
+             this.setEmo('❓', 1000);
          } else {
              this.riding = true; gemini.rider = this; this.vx = 0; this.vy = 0;
          }
@@ -82,7 +82,7 @@ class Cat {
         else {
           const dx = this.targetObj.x - this.x, dy = this.targetObj.y - this.y;
           const dist = Math.sqrt(dx*dx + dy*dy);
-          if(dist < 40) { this.vx = 0; this.vy = 0; this.setEmo('咕噜咕噜', 500); }
+          if(dist < 40) { this.vx = 0; this.vy = 0; this.setEmo('😺', 500); }
           else { this.vx = (dx/dist)*1.5; this.vy = (dy/dist)*1.5; } 
         }
       }
@@ -104,7 +104,7 @@ class Cat {
         this.targetObj.x = 50;
         this.targetObj.state = 'up'; 
         this.state = 'wander'; this.y += 20; this.timer = 2000;
-        this.setEmo('dizzy', 1500); 
+        this.setEmo('🥴', 1500); 
       } else {
         if(Math.random()<0.02) trashes.push(new Trash(this.x+20, this.y, 2, -2));
       }
@@ -117,7 +117,7 @@ class Cat {
       else {
         const dx = yarn.x - this.x, dy = yarn.y - this.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if(dist < 30) { yarn.vx += dx * 0.2; yarn.vy += dy * 0.2; this.setEmo('sparkle', 800); } 
+        if(dist < 30) { yarn.vx += dx * 0.2; yarn.vy += dy * 0.2; this.setEmo('✨', 800); } 
         else { this.vx = (dx/dist)*3; this.vy = (dy/dist)*3; }
       }
     }
@@ -137,7 +137,7 @@ class Cat {
         const dx=this.x-other.x, dy=this.y-other.y, dist=Math.sqrt(dx*dx+dy*dy); 
         if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.02) {
           this.state = 'sniff'; other.state = 'sniff'; this.timer = 1500; other.timer = 1500; this.vx=0; other.vx=0;
-          this.setEmo('question'); other.setEmo('question');
+          this.setEmo('❓'); other.setEmo('❓');
           
           setTimeout(() => {
             if(!this.isGrabbed && !other.isGrabbed) {
@@ -145,9 +145,9 @@ class Cat {
                 this.state = 'groom'; other.state = 'groom'; 
                 this.timer = 4000; other.timer = 4000;
                 this.x = other.x - 15; this.y = other.y; this.vx = -1; other.vx = 1; 
-                this.setEmo('heart', 3000); other.setEmo('heart', 3000);
+                this.setEmo('❤️', 3000); other.setEmo('❤️', 3000);
               } else if(Math.random() < 0.5) {
-                this.state = 'chase_cat'; this.targetObj = other; this.timer = 3000; this.setEmo('angry', 1000);
+                this.state = 'chase_cat'; this.targetObj = other; this.timer = 3000; this.setEmo('😾', 1000);
                 other.state = 'wander'; other.vx = (Math.random()-0.5)*5; other.vy = (Math.random()-0.5)*5;
               }
             }
@@ -164,7 +164,7 @@ class Cat {
         } else if (this.type === 'orange' && r < 0.4) {
            this.state = 'belly'; this.timer = 5000; this.vx = 0; this.vy = 0;
         } else if (r < 0.6) {
-           this.state = 'sleep'; this.timer = 3000; this.setEmo('sleep', 3000); this.vx = 0; this.vy = 0;
+           this.state = 'sleep'; this.timer = 3000; this.setEmo('💤', 3000); this.vx = 0; this.vy = 0;
         } else {
            const a = Math.random()*Math.PI*2; this.vx = Math.cos(a)*1.5; this.vy = Math.sin(a)*0.8; this.timer = 2000;
         }
@@ -174,7 +174,7 @@ class Cat {
     if(this.state === 'wander' && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 70 && Math.abs(f.y - this.y) < 70);
       if(f) {
-        if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('sleep', 8000); }
+        if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
         else if(f.t === 'box' && Math.random()<0.5) { this.state = 'sit_box'; this.targetObj = f; this.timer = 6000; }
         else if(f.t === 'tree' && Math.random()<0.5) { 
             let catsOnTree = cats.filter(c => c.targetObj === f && ['climb', 'sit_tree', 'scratch_tree'].includes(c.state)).length;
@@ -205,7 +205,6 @@ class Cat {
     if(this.emo && !this.isGrabbed) { 
       ctx.save(); ctx.scale(this.vx<0?-1:1, 1); 
       ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; 
-      if(this.emo === '咕噜咕噜') ctx.font='10px sans-serif';
       ctx.fillText(this.emo, -8, -25); 
       ctx.restore(); 
     }
@@ -318,7 +317,7 @@ class GeminiBot {
     this.state = 'idle'; 
     this.timer = 5000; this.rider = null;
     this.target = null; this.emo = '♪';
-    this.emos = ['♥', '✨', '♪', '=_=', '>_<', '🤖'];
+    this.emos = ['❤️', '✨', '♪', '=_=', 'X(', '🤖'];
     this.cleanMode = false;
     this.frenzyCooldown = 0;
   }
@@ -344,7 +343,7 @@ class GeminiBot {
       let cowCat = cats.find(c => c.type === 'cow');
       
       if(!this.rider && whiteCat && Math.abs(whiteCat.x - this.x) < 80 && Math.abs(whiteCat.y - this.y) < 50) {
-        this.state = 'wait'; this.timer = 3000; this.emo = '♥';
+        this.state = 'wait'; this.timer = 3000; this.emo = '❤️';
       }
       else if(cowCat && cowCat.state === 'zoomies' && this.frenzyCooldown <= 0) {
         if(Math.random() < 0.05) {
