@@ -53,17 +53,12 @@ function loop(ts) {
   let entities = [...furnitures, ...trashes, ...cats];
   
   entities.sort((a,b) => {
-    let ay = a.y, by = b.y;
-    
+    let ay = a.y || 400, by = b.y || 400;
     if(a.t === 'bed') ay -= 25; else if (a.t === 'tree' || a.t === 'box') ay -= 5;
     if(b.t === 'bed') by -= 25; else if (b.t === 'tree' || b.t === 'box') by -= 5;
 
-    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(a.state) && a.targetObj) {
-      ay = a.targetObj.y + 1; 
-    }
-    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(b.state) && b.targetObj) {
-      by = b.targetObj.y + 1;
-    }
+    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(a.state) && a.targetObj) ay = a.targetObj.y + 1; 
+    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(b.state) && b.targetObj) by = b.targetObj.y + 1;
     
     if(a instanceof Cat && a.state === 'hide') ay -= 50; 
     if(b instanceof Cat && b.state === 'hide') by -= 50;
@@ -120,9 +115,10 @@ canvas.addEventListener('mousedown', e => {
     let hitRadius = c.type === 'black' || c.type === 'grey' ? 60 : 40;
     if(Math.abs(c.x-pos.x) < hitRadius && Math.abs(c.y-pos.y) < hitRadius) {
       if(c.state === 'sleep_bed' || c.state === 'sit_box' || c.state === 'climb' || c.state === 'sit_tree' || c.state === 'in_bin' || c.state === 'scratch_tree') {
-        c.state = 'idle'; c.targetObj = null; c.climbY = 0;
+        c.state = 'wander'; c.targetObj = null; c.climbY = 0;
       } else {
-        c.state = 'grabbed'; c.ox = c.x - pos.x; c.oy = c.y - pos.y;
+        c.isGrabbed = true;
+        c.ox = c.x - pos.x; c.oy = c.y - pos.y;
       }
       grabbedObj = c; return;
     }
@@ -131,15 +127,6 @@ canvas.addEventListener('mousedown', e => {
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
     if(Math.abs(f.x-pos.x) < f.w/2 && Math.abs(f.y-pos.y) < f.h/2) {
-      if(f.t === 'bed' || f.t === 'box' || f.t === 'tree') {
-        if(f.t === 'bed' && f.occupant && f.occupant.state === 'sleep_bed') {
-          f.occupant.state = 'idle'; f.occupant = null;
-        } else if(f.t === 'box' && f.occupant && f.occupant.state === 'sit_box') {
-          f.occupant.state = 'idle'; f.occupant = null;
-        } else if(f.t === 'tree' && f.occupant && (f.occupant.state === 'climb' || f.occupant.state === 'sit_tree')) {
-          f.occupant.state = 'idle'; f.occupant = null;
-        }
-      }
       grabbedObj = f; f.ox = f.x - pos.x; f.oy = f.y - pos.y; return;
     }
   }
@@ -160,40 +147,23 @@ canvas.addEventListener('mousedown', e => {
 canvas.addEventListener('mouseup', () => {
   if(grabbedObj) {
     if(grabbedObj instanceof Cat) {
-      if(grabbedObj.state === 'grabbed') {
-        let onFloor = false;
-        for(let f of furnitures) {
-          if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80) {
-            f.occupant = grabbedObj; grabbedObj.state = 'sleep_bed'; onFloor = true; break;
-          }
-          if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60) {
-            f.occupant = grabbedObj; grabbedObj.state = 'sit_box'; onFloor = true; break;
-          }
-          if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130) {
-            grabbedObj.state = 'climb'; onFloor = true; break;
-          }
-        }
-        if(!onFloor) grabbedObj.state = 'idle';
-      }
-    } else if(grabbedObj.t) {
+      grabbedObj.isGrabbed = false;
       let onFloor = false;
       for(let f of furnitures) {
-        if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80 && !f.occupant) {
-          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80) {
+          grabbedObj.state = 'sleep_bed'; grabbedObj.targetObj = f; onFloor = true; break;
         }
-        if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60 && !f.occupant) {
-          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60) {
+          grabbedObj.state = 'sit_box'; grabbedObj.targetObj = f; onFloor = true; break;
         }
-        if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130 && !f.occupant) {
-          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130) {
+          grabbedObj.state = 'climb'; grabbedObj.targetObj = f; onFloor = true; break;
         }
       }
-      if(!onFloor) {
-        furnitures = furnitures.filter(ff => ff !== grabbedObj);
-      }
+      if(!onFloor) grabbedObj.state = 'wander';
+    } else if(grabbedObj.t) {
+      grabbedObj = null;
     }
     grabbedObj = null;
   }
 });
-
-// 其余原有代码保持不变（drawRoom、drawFurnitures、furnitures数组、updateWeather等全部保留）
