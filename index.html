@@ -5,133 +5,195 @@
   <title>赛博猫窝</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: #1a1a1a; overflow: hidden; font-family: sans-serif; }
-    canvas { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+    body { background: #111; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+    /* 核心：弹性视口缩放 */
+    #app { position: relative; width: 800px; height: 600px; transform-origin: center center; }
+    canvas { display: block; width: 100%; height: 100%; cursor: crosshair; background: #2a2520; box-shadow: 0 10px 40px rgba(0,0,0,0.8); border-radius: 8px; }
     #card {
-      display: none; position: fixed; background: #fef9f0; border: 2px solid #a68358; border-radius: 6px; 
-      padding: 12px; width: 240px; font-size: 13px; color: #333; box-shadow: 4px 4px 10px rgba(0,0,0,0.3); 
+      display: none; position: absolute; background: #fef9f0; border: 2px solid #a68358; border-radius: 6px; 
+      padding: 14px; width: 280px; font-size: 14px; color: #333; box-shadow: 4px 4px 15px rgba(0,0,0,0.4); 
       z-index: 100; pointer-events: none; transform: translate(-50%, -100%); margin-top: -15px;
     }
-    #card-content { line-height: 1.5; }
-    #card-author { margin-top: 8px; font-size: 11px; color: #888; text-align: right; }
+    #card-content { line-height: 1.6; }
+    #card-author { margin-top: 10px; font-size: 11px; color: #888; text-align: right; }
   </style>
 </head>
 <body>
 
-<canvas id="c"></canvas>
-<div id="card">
-  <div id="card-content"></div>
-  <div id="card-author"></div>
+<div id="app">
+  <canvas id="c" width="800" height="600"></canvas>
+  <div id="card">
+    <div id="card-content"></div>
+    <div id="card-author"></div>
+  </div>
 </div>
 
 <script>
+// ======== 自适应缩放 ========
+function resize() {
+  const scale = Math.min(window.innerWidth / 800, window.innerHeight / 600);
+  document.getElementById('app').style.transform = `scale(${scale})`;
+}
+window.addEventListener('resize', resize);
+resize();
+
+const W = 800, H = 600;
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const card = document.getElementById('card');
-let W = window.innerWidth, H = window.innerHeight;
-canvas.width = W; canvas.height = H;
-
-window.addEventListener('resize', () => { 
-  W = window.innerWidth; H = window.innerHeight; 
-  canvas.width = W; canvas.height = H; 
-});
-
 let mouseX = W/2, mouseY = H/2;
-window.addEventListener('mousemove', e => { mouseX = e.clientX; mouseY = e.clientY; });
+canvas.addEventListener('mousemove', e => { 
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  mouseX = (e.clientX - rect.left) * scaleX; 
+  mouseY = (e.clientY - rect.top) * scaleY; 
+});
 
 const trashLibrary = [ 
   { c: "猫的鼻子纹路就像人类的指纹，每只猫都独一无二。", a: "🐾 喵星解码" }, 
   { c: "《塞尔达传说》的灵感来自宫本茂小时候在京都野外探索的经历。", a: "🗡️ 海拉鲁拾遗" }, 
   { c: "家猫和老虎共享约95.6%的基因。", a: "🐅 猛兽血脉" }, 
-  { c: "猫没有甜味味觉受体，它们尝不出小蛋糕的味道。", a: "🍰 拒绝糖分" }, 
   { c: "世界上第一款电子游戏通常被认为是1958年的《双人网球》。", a: "🎮 游戏考古" }, 
   { c: "牛顿发明了猫洞，因为他的猫总是在他做光学实验时推门进来破坏暗室。", a: "🍎 物理学家的妥协" }, 
-  { c: "一只猫有32块肌肉控制耳朵，雷达极度灵敏。", a: "👂 猫科解剖学" }, 
   { c: "你今天很棒。如果没人跟你说，那纸团告诉你。", a: "📄 揉皱的纸团" }
 ];
 
-const S = 1.4; // 整体缩放倍率
-let trashes = [];
+let weather = 'sunny'; 
+let weatherTimer = 15000;
+let particles = [];
 
-function drawShadow(w, h) {
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.beginPath(); ctx.ellipse(0, 0, w, h, 0, 0, Math.PI*2); ctx.fill();
+function updateWeather(dt) {
+  weatherTimer -= dt;
+  if (weatherTimer <= 0) {
+    const ws = ['sunny', 'rain', 'snow'];
+    weather = ws[Math.floor(Math.random() * ws.length)];
+    weatherTimer = 20000 + Math.random() * 20000;
+    particles = [];
+  }
+  
+  if (weather === 'rain') {
+    if (Math.random() < 0.5) particles.push({ x: 150 + Math.random()*500, y: 50, vy: 10 + Math.random()*5, l: 15 });
+  } else if (weather === 'snow') {
+    if (Math.random() < 0.1) particles.push({ x: 150 + Math.random()*500, y: 50, vy: 1 + Math.random(), vx: (Math.random()-0.5)*2, l: 3 });
+  }
+
+  particles.forEach(p => {
+    p.y += p.vy; 
+    if(p.vx) p.x += p.vx;
+  });
+  particles = particles.filter(p => p.y < 350);
 }
 
 function drawRoom() {
   ctx.fillStyle = '#3a332a'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#2b251e'; ctx.fillRect(0, 0, W, 60); // 墙壁
-  ctx.strokeStyle = '#251f19'; ctx.lineWidth = 1.5;
-  for(let y=80; y<H; y+=30) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); } // 地板线
+  ctx.fillStyle = '#2b251e'; ctx.fillRect(0, 0, W, 180);
+  ctx.strokeStyle = '#251f19'; ctx.lineWidth = 2;
+  for(let y=220; y<H; y+=50) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  
+  // 落地大窗户
+  ctx.fillStyle = '#1a202c'; ctx.fillRect(150, 40, 500, 300);
+  
+  // 窗外天气效果
+  ctx.save(); ctx.beginPath(); ctx.rect(150, 40, 500, 300); ctx.clip();
+  if (weather === 'sunny') {
+    ctx.fillStyle = '#2c405a'; ctx.fillRect(150, 40, 500, 300);
+    ctx.fillStyle = 'rgba(255,255,200,0.1)';
+    ctx.beginPath(); ctx.moveTo(150,40); ctx.lineTo(400,340); ctx.lineTo(150,340); ctx.fill();
+  } else if (weather === 'rain') {
+    ctx.strokeStyle = 'rgba(150, 180, 220, 0.4)'; ctx.lineWidth = 1;
+    particles.forEach(p => { ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x-3, p.y+p.l); ctx.stroke(); });
+  } else if (weather === 'snow') {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    particles.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, p.l, 0, Math.PI*2); ctx.fill(); });
+  }
+  ctx.restore();
+  
+  // 窗框
+  ctx.strokeStyle = '#1e1814'; ctx.lineWidth = 10; ctx.strokeRect(150, 40, 500, 300);
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(400, 40); ctx.lineTo(400, 340); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(150, 150); ctx.lineTo(650, 150); ctx.stroke();
+}
+
+function drawShadow(w, h) {
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.beginPath(); ctx.ellipse(0, 0, w, h, 0, 0, Math.PI*2); ctx.fill();
 }
 
 class Trash {
   constructor(x,y,vx,vy) { this.x=x; this.y=y; this.vx=vx||0; this.vy=vy||0; this.scattered=false; this.pieces=[]; }
-  scatter() { this.scattered=true; for(let i=0;i<4;i++) this.pieces.push({x:this.x+(Math.random()-0.5)*30, y:this.y+(Math.random()-0.5)*30}); }
+  scatter() { this.scattered=true; for(let i=0;i<4;i++) this.pieces.push({x:this.x+(Math.random()-0.5)*40, y:this.y+(Math.random()-0.5)*40}); }
   update() {
     if(this.scattered) return;
     this.x += this.vx; this.y += this.vy;
     this.vx *= 0.92; this.vy *= 0.92;
-    if(this.y < 80) { this.y=80; this.vy*=-0.5; }
-    if(this.y > H-30) { this.y=H-30; this.vy*=-0.5; }
-    if(this.x < 30) { this.x=30; this.vx*=-0.5; }
-    if(this.x > W-30) { this.x=W-30; this.vx*=-0.5; }
+    if(this.y < 350) { this.y=350; this.vy*=-0.5; }
+    if(this.y > H-40) { this.y=H-40; this.vy*=-0.5; }
+    if(this.x < 40) { this.x=40; this.vx*=-0.5; }
+    if(this.x > W-40) { this.x=W-40; this.vx*=-0.5; }
   }
   draw() {
-    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(S,S);
+    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(1.5,1.5);
     if(this.scattered) {
       ctx.fillStyle='#b0b0b0'; this.pieces.forEach(p=>{
         ctx.save(); ctx.translate(p.x-this.x, p.y-this.y); ctx.rotate(Math.random());
         ctx.fillRect(-3,-2,6,4); ctx.restore();
       });
     } else {
-      drawShadow(6, 3); ctx.translate(0, -3);
-      ctx.fillStyle='#e0e0e0'; ctx.beginPath(); ctx.arc(0,0,6,0,Math.PI*2); ctx.fill();
+      drawShadow(8, 4); ctx.translate(0, -5);
+      ctx.fillStyle='#e0e0e0'; ctx.beginPath(); ctx.arc(0,0,8,0,Math.PI*2); ctx.fill();
       ctx.strokeStyle='#a0a0a0'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(-3,-2); ctx.lineTo(3,1); ctx.moveTo(-2,3); ctx.lineTo(3,-2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(-4,-3); ctx.lineTo(4,2); ctx.moveTo(-3,4); ctx.lineTo(4,-3); ctx.stroke();
     }
     ctx.restore();
   }
 }
 
 let furnitures = [
-  { t:'bed', x:W-120, y:H-60, w:30, h:15, isGrabbed:false, ox:0, oy:0, wobble:0 },
-  { t:'yarn', x:W-160, y:H-50, w:15, h:15, isGrabbed:false, ox:0, oy:0, wobble:0 },
-  { t:'box', x:W-200, y:H-70, w:25, h:20, isGrabbed:false, ox:0, oy:0, wobble:0 },
-  { t:'tree', x:W-70, y:H-100, w:20, h:40, isGrabbed:false, ox:0, oy:0, wobble:0 },
-  { t:'bin', x:W-240, y:H-80, w:15, h:20, isGrabbed:false, ox:0, oy:0, wobble:0 }
+  { t:'bed', x:W-180, y:H-100, w:50, h:25, ox:0, oy:0 },
+  { t:'yarn', x:W-300, y:H-80, w:20, h:20, ox:0, oy:0, vx:0, vy:0 },
+  { t:'box', x:W-100, y:H-160, w:45, h:35, ox:0, oy:0 },
+  { t:'tree', x:100, y:H-180, w:40, h:80, ox:0, oy:0 },
+  { t:'bin', x:W-250, y:H-200, w:25, h:30, ox:0, oy:0 }
 ];
 
 function drawFurnitures() {
   furnitures.sort((a,b)=>a.y - b.y).forEach(f => {
-    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(S,S);
-    if(f.wobble > 0) { ctx.rotate(Math.sin(Date.now()*0.02) * f.wobble * 0.02); f.wobble--; }
+    // 物理属性更新(仅毛线球)
+    if(f.t === 'yarn') {
+      f.x += f.vx; f.y += f.vy; f.vx *= 0.9; f.vy *= 0.9;
+      if(f.x < 40) f.x=40; if(f.x > W-40) f.x=W-40;
+      if(f.y < 350) f.y=350; if(f.y > H-40) f.y=H-40;
+    }
+    
+    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(1.8, 1.8);
     
     if(f.t === 'bed') {
-      drawShadow(22, 12);
-      ctx.fillStyle='#4a6b8c'; ctx.beginPath(); ctx.ellipse(0,-2, 20, 10, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle='#658bad'; ctx.beginPath(); ctx.ellipse(0,-4, 14, 6, 0, 0, Math.PI*2); ctx.fill();
+      drawShadow(30, 15);
+      ctx.fillStyle='#4a6b8c'; ctx.beginPath(); ctx.ellipse(0,-3, 28, 14, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#658bad'; ctx.beginPath(); ctx.ellipse(0,-6, 20, 9, 0, 0, Math.PI*2); ctx.fill();
     } else if(f.t === 'box') {
-      drawShadow(18, 10);
-      ctx.fillStyle='#8b6a47'; ctx.fillRect(-15,-15,30,20);
-      ctx.fillStyle='#a8855e'; ctx.fillRect(-15,-19,30,4); ctx.fillRect(-17,-15,2,20);
+      drawShadow(25, 12);
+      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-20,40,25);
+      ctx.fillStyle='#604830'; ctx.fillRect(-18,-18,36,20); // 内部深色
+      ctx.fillStyle='#a8855e'; ctx.fillRect(-20,-24,40,4); ctx.fillRect(-22,-20,2,25);
     } else if(f.t === 'tree') {
-      drawShadow(16, 8);
-      ctx.fillStyle='#9e8d73'; ctx.fillRect(-12,10,24,4);
-      ctx.fillStyle='#b8a992'; ctx.fillRect(-4,-20,8,30);
-      ctx.strokeStyle='#8c7d65'; ctx.lineWidth=0.5;
-      for(let i=-18; i<10; i+=2) { ctx.beginPath(); ctx.moveTo(-4,i); ctx.lineTo(4,i+1); ctx.stroke(); }
-      ctx.fillStyle='#9e8d73'; ctx.fillRect(-14,-24,28,4);
+      drawShadow(25, 12);
+      ctx.fillStyle='#9e8d73'; ctx.fillRect(-20,5,40,8);
+      ctx.fillStyle='#b8a992'; ctx.fillRect(-6,-40,12,50); // 柱子
+      ctx.strokeStyle='#8c7d65'; ctx.lineWidth=1;
+      for(let i=-38; i<10; i+=3) { ctx.beginPath(); ctx.moveTo(-6,i); ctx.lineTo(6,i+2); ctx.stroke(); }
+      ctx.fillStyle='#9e8d73'; ctx.fillRect(-22,-45,44,6); // 顶部平台
     } else if(f.t === 'yarn') {
-      drawShadow(10, 5);
-      ctx.fillStyle='#b84d4d'; ctx.beginPath(); ctx.arc(0,-4,8,0,Math.PI*2); ctx.fill();
-      ctx.strokeStyle='#913636'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(-5,-8); ctx.lineTo(4,1); ctx.moveTo(2,-9); ctx.lineTo(-4,1); ctx.stroke();
-    } else if(f.t === 'bin') {
       drawShadow(12, 6);
-      ctx.fillStyle='#5c6666'; ctx.fillRect(-10,-18,20,20);
-      ctx.fillStyle='#737f80'; ctx.beginPath(); ctx.ellipse(0,-18, 10, 4, 0, 0, Math.PI*2); ctx.fill();
-      ctx.fillStyle='#cfd6d6'; ctx.fillRect(-4,-22,6,6); ctx.fillRect(-2,-20,8,4);
+      ctx.rotate(f.x * 0.05); // 滚动旋转
+      ctx.fillStyle='#b84d4d'; ctx.beginPath(); ctx.arc(0,-6,10,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='#913636'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(-6,-10); ctx.lineTo(5,0); ctx.moveTo(3,-11); ctx.lineTo(-5,0); ctx.stroke();
+    } else if(f.t === 'bin') {
+      drawShadow(16, 8);
+      ctx.fillStyle='#5c6666'; ctx.fillRect(-12,-22,24,24);
+      ctx.fillStyle='#737f80'; ctx.beginPath(); ctx.ellipse(0,-22, 12, 5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.fillStyle='#cfd6d6'; ctx.fillRect(-5,-26,8,8); ctx.fillRect(-2,-24,10,6);
     }
     ctx.restore();
   });
@@ -139,219 +201,198 @@ function drawFurnitures() {
 
 class Cat {
   constructor(type, x, c) {
-    this.type = type; this.x = x; this.y = H/2; this.c = c;
+    this.type = type; this.x = x; this.y = 400; this.c = c;
     this.state = 'wander'; this.vx=0; this.vy=0; this.timer=0;
-    this.isGrabbed = false; this.riding = false;
+    this.emo = null; this.emoTimer = 0;
   }
+  setEmo(e, time=1500) { this.emo = e; this.emoTimer = time; }
+  
   update(dt, cats) {
-    if(this.isGrabbed) return;
-    
-    if(this.riding && gemini.sweeping) {
-      this.x = gemini.x; this.y = gemini.y - 12*S;
-      if(Math.random()<0.003 || gemini.spin > 0) { this.riding = false; this.vy = -2; gemini.rider = null; }
-      return;
-    } else { this.riding = false; }
+    if(this.emoTimer > 0) this.emoTimer -= dt; else this.emo = null;
 
     this.timer -= dt;
-    let busy = ['sniff', 'sleep_bed', 'sit_box', 'scratch', 'sit_trash', 'belly'].includes(this.state);
-    if(busy) {
-      this.vx = 0; this.vy = 0;
-      if(this.timer <= 0) this.state = 'wander';
+    let busy = ['sniff', 'sleep_bed', 'sit_box', 'scratch', 'window'].includes(this.state);
+    
+    if(busy && this.timer <= 0) this.state = 'wander';
+
+    // 毛线球互动
+    let yarn = furnitures.find(f => f.t === 'yarn');
+    if(yarn && !busy && Math.abs(yarn.x - this.x) < 50 && Math.abs(yarn.y - this.y) < 40) {
+      if(Math.random()<0.1) { yarn.vx += (yarn.x-this.x)*0.1; yarn.vy += (yarn.y-this.y)*0.1; this.setEmo('✨', 800); }
     }
 
-    if(gemini.sweeping && !this.riding && !gemini.rider && !busy && Math.abs(gemini.x-this.x)<25) {
-      if(Math.random()<0.05) { this.riding = true; gemini.rider = this; this.vx=0; this.vy=0; return; }
-    }
-
+    // 互嗅
     cats.forEach(other => { 
-      if(other!==this && !other.isGrabbed && !this.riding && !other.riding && !busy){ 
+      if(other!==this && !busy){ 
         const dx=this.x-other.x, dy=this.y-other.y, dist=Math.sqrt(dx*dx+dy*dy); 
-        if(dist<25 && this.state==='wander' && other.state==='wander' && Math.random()<0.02) {
+        if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.01) {
           this.state = 'sniff'; other.state = 'sniff';
-          this.timer = 1500; other.timer = 1500; this.vx = 0; other.vx = 0;
+          this.timer = 2000; other.timer = 2000; this.vx=0; other.vx=0;
+          this.setEmo('❓'); other.setEmo('❓');
         }
-        else if(dist<15){ this.x+=dx*0.1; this.y+=dy*0.1; } 
+        else if(dist<25){ this.x+=dx*0.05; this.y+=dy*0.05; } 
       } 
     });
 
-    if(this.state === 'wander' && Math.random() < 0.03) {
-      let bin = furnitures.find(f => f.t === 'bin');
-      if(bin && Math.abs(bin.x - this.x) < 40 && Math.abs(bin.y - this.y) < 40) {
-        bin.wobble = 20;
-        if(Math.random() < 0.6) trashes.push(new Trash(bin.x, bin.y-10, (Math.random()-0.5)*10, -3 - Math.random()*5));
+    if(this.state === 'wander' && Math.random() < 0.02) {
+      let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
+      if(f) {
+        if(f.t === 'bed' && Math.random()<0.3) { this.state = 'sleep_bed'; this.x = f.x; this.y = f.y; this.timer = 8000; this.setEmo('💤', 8000); }
+        else if(f.t === 'box' && Math.random()<0.3) { this.state = 'sit_box'; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
+        else if(f.t === 'tree' && Math.random()<0.3) { this.state = 'scratch'; this.x = f.x; this.y = f.y-70; this.timer = 4000; }
       }
       
-      let f = furnitures.find(f => Math.abs(f.x - this.x) < 30 && Math.abs(f.y - this.y) < 30);
-      if(f) {
-        if(f.t === 'bed' && Math.random()<0.3) { this.state = 'sleep_bed'; this.x = f.x; this.y = f.y; this.timer = 6000; }
-        else if(f.t === 'box' && Math.random()<0.3) { this.state = 'sit_box'; this.x = f.x; this.y = f.y; this.timer = 5000; }
-        else if(f.t === 'tree' && Math.random()<0.3) { this.state = 'scratch'; this.x = f.x-15; this.y = f.y+10; this.timer = 2000; }
-        else if(f.t === 'yarn') { f.wobble = 15; f.x += (Math.random()-0.5)*10; }
-      }
-
-      trashes.forEach(t => {
-        if(!t.scattered && Math.abs(t.x-this.x)<40 && Math.abs(t.y-this.y)<30) {
-          if(this.type === 'white' && Math.random()<0.5) { t.vx += (t.x-this.x)*0.2; t.vy += (t.y-this.y)*0.2; }
-          else if(Math.random()<0.2) { this.state = 'sit_trash'; this.x = t.x; this.y = t.y; this.timer = 3000; }
-        }
-      });
-    }
-
-    if(this.type === 'orange' && this.state === 'wander' && Math.random()<0.002) {
-      this.state = 'belly'; this.timer = 3000; this.vx = 0; this.vy = 0;
-    }
-
-    if(this.type === 'cow' && !busy) {
-      if(this.timer<=0) {
-        if(Math.random()<0.2) { this.state='zoomies'; this.vx=(Math.random()-0.5)*5; this.vy=(Math.random()-0.5)*2; this.timer=1000; }
-        else { this.state='wander'; this.vx=(Math.random()-0.5)*0.6; this.vy=(Math.random()-0.5)*0.3; this.timer=1000; }
-      }
-    } else if(!busy) {
-      if(this.timer<=0) {
-        if(Math.random()<0.3) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=2000; }
-        else { this.state='wander'; const a=Math.random()*Math.PI*2; this.vx=Math.cos(a)*0.6; this.vy=Math.sin(a)*0.2; this.timer=1500; }
+      // 看窗外
+      if((weather === 'rain' || weather === 'snow') && Math.random()<0.3 && this.y < 380) {
+        this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo('❗', 1000);
       }
     }
 
-    if(!this.riding && !busy) {
+    if(this.type === 'cow' && !busy && this.timer<=0) {
+      if(Math.random()<0.2) { this.state='zoomies'; this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*3; this.timer=800; this.setEmo('💢',800); }
+      else { this.state='wander'; this.vx=(Math.random()-0.5)*1; this.vy=(Math.random()-0.5)*0.5; this.timer=1500; }
+    } else if(!busy && this.timer<=0) {
+      if(Math.random()<0.3) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=3000; this.setEmo('💤', 3000); }
+      else { this.state='wander'; const a=Math.random()*Math.PI*2; this.vx=Math.cos(a)*1; this.vy=Math.sin(a)*0.4; this.timer=2000; }
+    }
+
+    if(!busy) {
       this.x += this.vx * dt * 0.05; this.y += this.vy * dt * 0.05;
-      this.x = Math.max(30, Math.min(W-30, this.x));
-      this.y = Math.max(80, Math.min(H-30, this.y));
+      this.x = Math.max(50, Math.min(W-50, this.x));
+      this.y = Math.max(350, Math.min(H-40, this.y));
     }
   }
   
   draw() {
-    ctx.save(); ctx.translate(this.x, this.y); ctx.scale(S,S);
-    if(this.vx<0 && !this.isGrabbed && this.state !== 'belly') ctx.scale(-1,1);
+    ctx.save(); ctx.translate(this.x, this.y); ctx.scale(1.5, 1.5);
     
-    if(this.state === 'sniff') { ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='8px sans-serif'; ctx.fillText('?', -3, -20); }
-    if(this.state === 'belly') { ctx.scale(1,-1); ctx.translate(0, 4); }
-    if(!this.isGrabbed && this.state !== 'sleep_bed' && this.state !== 'sit_box') drawShadow(10, 4);
+    // 面向与特殊状态翻转
+    if(this.state === 'window') { /* 背影，不翻转 */ }
+    else if(this.vx<0) ctx.scale(-1,1);
+    
+    if(this.emo) { ctx.scale(this.vx<0?-1:1, 1); ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; ctx.fillText(this.emo, -8, -25); ctx.scale(this.vx<0?-1:1, 1); }
+
+    if(!['sleep_bed', 'sit_box'].includes(this.state)) drawShadow(12, 5);
 
     ctx.fillStyle = this.c.body;
     
     if(this.state === 'sit_box') {
-      ctx.fillRect(-6,-12,12,8); ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-15,3,4); ctx.fillRect(2,-15,3,4);
-      ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-9,2,2); ctx.fillRect(2,-9,2,2);
-    } else if(this.state === 'sleep_bed' || this.state === 'sleep' || this.state === 'sit_trash') {
-      ctx.fillRect(-8,-4,16,10); ctx.fillRect(-6,-10,10,8);
-      ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-13,3,4); ctx.fillRect(2,-13,3,4);
-      ctx.fillStyle=(this.state==='sit_trash')?this.c.eye:'#1a1a1a'; ctx.fillRect(-3,-7,3,1); ctx.fillRect(3,-7,3,1);
-    } else if(this.isGrabbed) {
-      const kick = Math.sin(Date.now() * 0.04) * 3;
-      ctx.fillRect(-6, -4, 12, 18); ctx.fillRect(-6, -12, 12, 10);
-      ctx.fillRect(-5, 14, 3, 5+kick); ctx.fillRect(2, 14, 3, 5-kick);
-      ctx.fillStyle=this.c.ear; ctx.fillRect(-5, -16, 3, 4); ctx.fillRect(2, -16, 3, 4);
-      ctx.fillStyle=this.c.eye; ctx.fillRect(-4, -8, 2, 2); ctx.fillRect(2, -8, 2, 2);
-    } else {
-      ctx.fillRect(-7,-6,14,9); ctx.fillRect(-5,-12,10,8);
-      const moving = Math.abs(this.vx)>0.1 || Math.abs(this.vy)>0.1 || this.state==='scratch';
-      const bounce = (moving && this.state !== 'belly') ? Math.sin(Date.now()*0.02)*1.5 : 0;
-      if(this.state === 'scratch') { ctx.fillRect(-6,-4+bounce,3,8); ctx.fillRect(3,-4-bounce,3,8); }
-      else { ctx.fillRect(-6,3,3,4-bounce); ctx.fillRect(3,3,3,4+bounce); }
-      ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-15,3,4); ctx.fillRect(2,-15,3,4);
-      ctx.fillStyle=this.c.eye; ctx.fillRect(-3,-9,2,2); ctx.fillRect(3,-9,2,2);
-      
-      if(this.type === 'cow') { ctx.fillStyle='#222'; ctx.fillRect(-7,-6,6,5); ctx.fillRect(1,-4,6,6); ctx.fillRect(-5,-12,4,4); }
-      
-      let tailAngle = 0;
-      if(this.type === 'grey') {
-        tailAngle = Math.atan2(mouseY - this.y, mouseX - this.x);
-        if(this.vx<0) tailAngle = Math.PI - tailAngle; 
-      } else { tailAngle = Math.sin(Date.now()*0.005)*0.5; }
+      // 钻箱子，只画头和尾巴
+      ctx.fillRect(-6,-16,12,10); // 头
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-20,4,5); ctx.fillRect(1,-20,4,5);
+      ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-13,2,2); ctx.fillRect(2,-13,2,2);
       ctx.fillStyle = this.c.body;
-      ctx.save(); ctx.translate(-6, -2); ctx.rotate(tailAngle);
-      ctx.fillRect(-8, -1, 8, 3); ctx.restore();
+      ctx.save(); ctx.translate(15, -5); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(0,0,12,4); ctx.restore(); // 露在外面的尾巴
+    } else if(this.state === 'sleep_bed' || this.state === 'sleep') {
+      ctx.fillRect(-10,-5,20,12); ctx.fillRect(-8,-12,12,10);
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-16,4,5); ctx.fillRect(3,-16,4,5);
+      ctx.fillStyle='#1a1a1a'; ctx.fillRect(-5,-8,4,1.5); ctx.fillRect(3,-8,4,1.5);
+    } else if(this.state === 'window') {
+      // 看窗外的背影
+      ctx.fillRect(-8,-8,16,14); ctx.fillRect(-6,-16,12,10); // 身体和头
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-20,4,5); ctx.fillRect(2,-20,4,5);
+      // 背影尾巴
+      ctx.fillStyle = this.c.body;
+      ctx.save(); ctx.translate(0, 4); ctx.rotate(Math.PI/2 + Math.sin(Date.now()*0.005)*0.2); ctx.fillRect(0,0,14,4); ctx.restore();
+    } else {
+      ctx.fillRect(-9,-8,18,12); ctx.fillRect(-7,-15,12,10);
+      const moving = Math.abs(this.vx)>0.1 || Math.abs(this.vy)>0.1;
+      const bounce = moving ? Math.sin(Date.now()*0.02)*2 : 0;
+      ctx.fillRect(-8,4,4,5-bounce); ctx.fillRect(4,4,4,5+bounce);
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-19,4,5); ctx.fillRect(3,-19,4,5);
+      ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2);
+      
+      if(this.type === 'cow') { ctx.fillStyle='#222'; ctx.fillRect(-9,-8,8,6); ctx.fillRect(1,-5,8,7); ctx.fillRect(-7,-15,5,5); }
+      
+      ctx.fillStyle = this.c.body;
+      ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
     }
     ctx.restore();
   }
 }
 
-class GeminiBot {
-  constructor() { this.x=-50; this.y=H-40; this.sweeping=false; this.dir=1; this.timer=5000; this.spin=0; this.rider=null; }
-  update(dt) {
-    if(this.spin > 0) { this.spin -= dt; if(this.rider) this.rider.riding = false; this.rider = null; return; }
-    this.timer -= dt;
-    if(this.timer<=0 && !this.sweeping) { this.sweeping=true; this.dir=Math.random()<0.5?1:-1; this.x=this.dir>0?-50:W+50; this.y = 80 + Math.random()*(H-100); this.timer=12000; }
-    if(this.sweeping) {
-      if(this.rider && (!this.rider.riding || Math.abs(this.rider.x - this.x) > 10)) this.rider = null;
-      this.x += this.dir * (this.rider ? 0.05 : 0.08) * dt;
-      trashes.forEach(t=>{ if(t.scattered) t.pieces = t.pieces.filter(p=>Math.abs(p.x-this.x)>25); });
-      if(this.x<-60 || this.x>W+60) { this.sweeping=false; this.rider=null; trashes=trashes.filter(t=>!t.scattered || t.pieces.length>0); }
-    }
-  }
-  draw() {
-    if(!this.sweeping) return;
-    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(S,S); drawShadow(14, 5);
-    if(this.spin > 0) ctx.rotate(Date.now() * 0.02); else if(this.dir<0) ctx.scale(-1,1);
-    ctx.fillStyle='#5ba4d4'; ctx.fillRect(-9,-9,18,14); ctx.fillStyle='#d0eeff'; ctx.fillRect(-6,-7,12,7);
-    ctx.fillStyle=(this.spin>0)?'#ff5555':'#2060a0'; 
-    if(this.spin>0) { ctx.fillRect(-4,-5,3,1); ctx.fillRect(1,-5,3,1); } else { ctx.fillRect(-4,-5,3,3); ctx.fillRect(1,-5,3,3); }
-    ctx.fillStyle='#2c3e50'; ctx.fillRect(-8,5,5,4); ctx.fillRect(3,5,5,4);
-    ctx.strokeStyle='#8b7355'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(9,-2); ctx.lineTo(18,6); ctx.stroke();
-    if(this.rider && this.spin <= 0) {
-      let expr = "=_=";
-      if(this.rider.type==='orange') expr = "T_T"; else if(this.rider.type==='grey') expr = "._."; else if(this.rider.type==='cow') expr = "@_@";
-      ctx.scale(this.dir<0?-1:1, 1);
-      ctx.fillStyle='rgba(60,130,200,0.9)'; ctx.font='bold 10px sans-serif'; ctx.fillText(expr, -8, -12);
-    }
-    ctx.restore();
-  }
-}
-
+let trashes = [];
 const cats = [
   new Cat('white', W/2-50, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
   new Cat('grey', W/2, {body:'#9e968d', ear:'#827a70', eye:'#4a6b82'}),
   new Cat('orange', W/2+50, {body:'#e0ab67', ear:'#c28b4a', eye:'#7b5c94'}),
   new Cat('cow', W/2+100, {body:'#f5f5f5', ear:'#222222', eye:'#d4af37'})
 ];
-const gemini = new GeminiBot();
-let lastTime=performance.now();
+
+let lastTime=performance.now(), spawnTimer=2000;
 
 function loop(ts) {
   const dt = Math.min(ts-lastTime, 50); lastTime=ts;
   ctx.clearRect(0,0,W,H);
+  
+  updateWeather(dt);
   drawRoom();
-  drawFurnitures();
-  trashes.forEach(t=> { t.update(); t.draw(); });
-  cats.sort((a,b)=>a.y - b.y).forEach(c=>{ c.update(dt,cats); c.draw(); });
-  gemini.update(dt); gemini.draw();
+  
+  spawnTimer-=dt;
+  if(spawnTimer<=0 && trashes.filter(t=>!t.scattered).length<4) {
+    trashes.push(new Trash(100+Math.random()*(W-200), 380+Math.random()*(H-420)));
+    spawnTimer=4000+Math.random()*5000;
+  }
+  
+  // 深度渲染排序
+  let entities = [...furnitures, ...trashes, ...cats];
+  entities.sort((a,b) => {
+    // 处理猫钻进箱子和爬猫抓板的渲染层级
+    let ay = a.y, by = b.y;
+    if(a instanceof Cat && a.state === 'sit_box') ay += 15;
+    if(b instanceof Cat && b.state === 'sit_box') by += 15;
+    if(a instanceof Cat && a.state === 'scratch') ay += 70;
+    if(b instanceof Cat && b.state === 'scratch') by += 70;
+    return ay - by;
+  });
+
+  entities.forEach(e => {
+    if(e instanceof Cat) e.update(dt, cats);
+    else if(e instanceof Trash) e.update();
+    
+    if(e.t) drawFurnitures.call(this); // 如果是家具则跳过单独draw，统一在循环外？不，改变架构：
+  });
+  
+  // 按照重构好的层级绘制
+  entities.forEach(e => {
+    if(e instanceof Cat || e instanceof Trash) e.draw();
+    else {
+      // 提取单个家具绘制逻辑以支持深度排序
+      let oldList = furnitures;
+      furnitures = [e];
+      drawFurnitures();
+      furnitures = oldList;
+    }
+  });
+  
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
 
-let grabbedObj = null, cardTimeout = null;
-canvas.addEventListener('mousedown', e => {
-  const mx = e.clientX, my = e.clientY;
-  if(gemini.sweeping && Math.abs(gemini.x-mx)<30 && Math.abs(gemini.y-my)<30) { gemini.spin = 1500; return; }
-  for(let i=cats.length-1; i>=0; i--) {
-    let c = cats[i];
-    if(Math.abs(c.x-mx)<40 && Math.abs(c.y-my)<40) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
-  }
-  for(let i=furnitures.length-1; i>=0; i--) {
-    let f = furnitures[i];
-    if(Math.abs(f.x-mx)<f.w*2 && Math.abs(f.y-my)<f.h*2) { grabbedObj = f; f.isGrabbed = true; f.ox = f.x-mx; f.oy = f.y-my; return; }
-  }
-  const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-mx)<20 && Math.abs(t.y-my)<20);
+const card = document.getElementById('card');
+let cardTimeout = null;
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const mx = (e.clientX - rect.left) * scaleX; 
+  const my = (e.clientY - rect.top) * scaleY; 
+
+  const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-mx)<25 && Math.abs(t.y-my)<25);
   if(clickedTrash) {
     const item = trashLibrary[Math.floor(Math.random()*trashLibrary.length)];
     document.getElementById('card-content').textContent = item.c;
     document.getElementById('card-author').textContent = item.a;
-    card.style.left = Math.min(Math.max(clickedTrash.x, 120), W - 120) + 'px';
-    card.style.top = Math.max(clickedTrash.y - 30, 80) + 'px';
+    
+    // 换算回屏幕坐标用于DOM定位
+    card.style.left = (e.clientX) + 'px';
+    card.style.top = (e.clientY - 20) + 'px';
     card.style.display = 'block';
+    
     if(cardTimeout) clearTimeout(cardTimeout);
     cardTimeout = setTimeout(()=>card.style.display='none', 4500);
   }
-});
-window.addEventListener('mousemove', e => { 
-  if(grabbedObj) { 
-    if(grabbedObj.ox !== undefined) { grabbedObj.x = e.clientX + grabbedObj.ox; grabbedObj.y = e.clientY + grabbedObj.oy; }
-    else { grabbedObj.x = e.clientX; grabbedObj.y = e.clientY; }
-  } 
-});
-window.addEventListener('mouseup', e => { 
-  if(grabbedObj) { grabbedObj.isGrabbed = false; if(grabbedObj.state) grabbedObj.state = 'wander'; grabbedObj = null; } 
 });
 </script>
 </body>
