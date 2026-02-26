@@ -43,7 +43,7 @@ function loop(ts) {
   updateWeather(dt);
   drawRoom();
   
-  // 清理被机器人吃掉的垃圾
+  // 实时清理被吃掉的纸团
   trashes = trashes.filter(t => !t.eaten);
   
   spawnTimer-=dt;
@@ -54,25 +54,28 @@ function loop(ts) {
   
   let entities = [...furnitures, ...trashes, ...cats];
   
-  // 深度排序修复：猫窝图层与攀爬Y轴偏移修正
+  // 彻底重构的深度图层系统
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
     if(a.climbY) ay += a.climbY; 
     if(b.climbY) by += b.climbY;
     
-    if(a instanceof Cat) {
+    // 强制把猫窝推远，让它永远垫在脚下
+    if(a.t === 'bed') ay -= 30; 
+    else if(a instanceof Cat) {
       if(a.state === 'sit_box' || a.state === 'in_bin') ay += 100;
-      if(a.state === 'sleep_bed') ay = a.targetObj ? a.targetObj.y + 10 : ay; 
+      if(a.state === 'sleep_bed') ay = a.targetObj ? a.targetObj.y - 29 : ay; // 贴在猫窝上面
       if(a.state === 'climb' || a.state === 'sit_tree') ay += 200; 
       if(a.state === 'hide') ay -= 50; 
-    } else if(a.t === 'bed') { ay -= 5; } // 把猫窝的基准线往后推一点点
+    }
     
-    if(b instanceof Cat) {
+    if(b.t === 'bed') by -= 30;
+    else if(b instanceof Cat) {
       if(b.state === 'sit_box' || b.state === 'in_bin') by += 100;
-      if(b.state === 'sleep_bed') by = b.targetObj ? b.targetObj.y + 10 : by;
+      if(b.state === 'sleep_bed') by = b.targetObj ? b.targetObj.y - 29 : by;
       if(b.state === 'climb' || b.state === 'sit_tree') by += 200;
       if(b.state === 'hide') by -= 50;
-    } else if(b.t === 'bed') { by -= 5; }
+    }
     
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
     return ay - by;
@@ -99,7 +102,7 @@ let grabbedObj = null, cardTimeout = null;
 canvas.addEventListener('mousedown', e => {
   const pos = getMousePos(e);
   
-  // 核心：点屏幕任何地方都先关闭字幕弹窗
+  // 每次点击任何地方，先关闭弹窗
   card.style.display = 'none';
   if(cardTimeout) clearTimeout(cardTimeout);
   
@@ -133,16 +136,18 @@ canvas.addEventListener('mousedown', e => {
     document.getElementById('card-content').textContent = item.c;
     document.getElementById('card-author').textContent = item.a;
     
-    // 弹窗溢出视窗检测
     card.style.display = 'block'; 
-    const cWidth = 310; // 固定宽度预估
-    const cHeight = card.offsetHeight || 80;
-    let cardLeft = e.clientX;
-    let cardTop = e.clientY - 20;
+    const rect = card.getBoundingClientRect();
+    const cWidth = rect.width || 280;
+    const cHeight = rect.height || 80;
     
-    if(cardLeft + cWidth/2 > window.innerWidth) cardLeft = window.innerWidth - cWidth/2 - 10;
-    if(cardLeft - cWidth/2 < 0) cardLeft = cWidth/2 + 10;
-    if(cardTop - cHeight < 0) cardTop = e.clientY + 30; // 顶部溢出就在下方显示
+    let cardLeft = e.clientX - cWidth / 2;
+    let cardTop = e.clientY - cHeight - 15;
+    
+    // 完美的视窗防溢出推回算法
+    if (cardLeft + cWidth > window.innerWidth) cardLeft = window.innerWidth - cWidth - 15;
+    if (cardLeft < 15) cardLeft = 15;
+    if (cardTop < 15) cardTop = e.clientY + 25; // 顶部挤不下了就显示在鼠标下面
     
     card.style.left = cardLeft + 'px';
     card.style.top = cardTop + 'px';
@@ -151,7 +156,6 @@ canvas.addEventListener('mousedown', e => {
   }
 });
 
-// 人为强行社交逻辑
 window.addEventListener('mouseup', e => { 
   if(grabbedObj) { 
     grabbedObj.isGrabbed = false; 
@@ -159,7 +163,7 @@ window.addEventListener('mouseup', e => {
       grabbedObj.state = 'wander'; 
       grabbedObj.climbY = 0; 
       
-      // 落地后检测最近的猫，强行交互
+      // 空投强制社交逻辑：寻找降落点最近的猫
       let closest = null; let minDist = 60;
       cats.forEach(other => {
         if(other !== grabbedObj && !other.isGrabbed) {
