@@ -7,6 +7,23 @@ function getMousePos(e) {
   return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
 }
 
+window.addEventListener('mousemove', e => { 
+  const pos = getMousePos(e); 
+  window.mouseX = pos.x; 
+  window.mouseY = pos.y; 
+
+  if(grabbedObj) { 
+    if(grabbedObj.ox !== undefined) { 
+      grabbedObj.x = pos.x + grabbedObj.ox; 
+      grabbedObj.y = pos.y + grabbedObj.oy; 
+    } else { 
+      grabbedObj.x = pos.x; 
+      grabbedObj.y = pos.y; 
+      grabbedObj.climbY = 0; 
+    }
+  } 
+});
+
 const cats = [
   new Cat('white', W/2-100, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
   new Cat('grey', W/2-50, {body:'#9e968d', ear:'#827a70', eye:'#4a6b82'}),
@@ -26,26 +43,37 @@ function loop(ts) {
   updateWeather(dt);
   drawRoom();
   
+  // 清理被机器人吃掉的垃圾
+  trashes = trashes.filter(t => !t.eaten);
+  
   spawnTimer-=dt;
-  if(spawnTimer<=0 && trashes.filter(t=>!t.scattered).length<4) {
+  if(spawnTimer<=0 && trashes.length < 15) {
     trashes.push(new Trash(100+Math.random()*(W-200), 380+Math.random()*(H-420)));
     spawnTimer=4000+Math.random()*5000;
   }
   
   let entities = [...furnitures, ...trashes, ...cats];
-  // 复杂的深度排序：涵盖攀爬、箱内、猫窝、掩体后和普通遮挡
+  
+  // 深度排序修复：猫窝图层与攀爬Y轴偏移修正
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
+    if(a.climbY) ay += a.climbY; 
+    if(b.climbY) by += b.climbY;
+    
     if(a instanceof Cat) {
-      if(['sit_box', 'in_bin', 'sleep_bed'].includes(a.state)) ay += 100;
-      if(['climb', 'sit_tree'].includes(a.state)) ay += 200; 
+      if(a.state === 'sit_box' || a.state === 'in_bin') ay += 100;
+      if(a.state === 'sleep_bed') ay = a.targetObj ? a.targetObj.y + 10 : ay; 
+      if(a.state === 'climb' || a.state === 'sit_tree') ay += 200; 
       if(a.state === 'hide') ay -= 50; 
-    }
+    } else if(a.t === 'bed') { ay -= 5; } // 把猫窝的基准线往后推一点点
+    
     if(b instanceof Cat) {
-      if(['sit_box', 'in_bin', 'sleep_bed'].includes(b.state)) by += 100;
-      if(['climb', 'sit_tree'].includes(b.state)) by += 200;
+      if(b.state === 'sit_box' || b.state === 'in_bin') by += 100;
+      if(b.state === 'sleep_bed') by = b.targetObj ? b.targetObj.y + 10 : by;
+      if(b.state === 'climb' || b.state === 'sit_tree') by += 200;
       if(b.state === 'hide') by -= 50;
-    }
+    } else if(b.t === 'bed') { by -= 5; }
+    
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
     return ay - by;
   });
@@ -71,6 +99,10 @@ let grabbedObj = null, cardTimeout = null;
 canvas.addEventListener('mousedown', e => {
   const pos = getMousePos(e);
   
+  // 核心：点屏幕任何地方都先关闭字幕弹窗
+  card.style.display = 'none';
+  if(cardTimeout) clearTimeout(cardTimeout);
+  
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
     if(gemini.state === 'frenzy') { gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '×_×'; return; }
     if(gemini.state === 'sweep') { gemini.emo = '♥'; }
@@ -81,7 +113,7 @@ canvas.addEventListener('mousedown', e => {
     let hitRadius = c.type === 'black' ? 60 : 40;
     if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { 
       grabbedObj = c; c.isGrabbed = true; c.riding = false; 
-      e.preventDefault(); // 关键补丁：阻止浏览器原生选中
+      e.preventDefault(); 
       return; 
     }
   }
@@ -89,10 +121,11 @@ canvas.addEventListener('mousedown', e => {
     let f = furnitures[i];
     if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
       grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
-      e.preventDefault(); // 关键补丁：阻止浏览器原生选中
+      e.preventDefault(); 
       return; 
     }
   }
+  
   const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
   if(clickedTrash) {
     const lib = clickedTrash.isGolden ? goldenLibrary : trashLibrary;
@@ -100,44 +133,63 @@ canvas.addEventListener('mousedown', e => {
     document.getElementById('card-content').textContent = item.c;
     document.getElementById('card-author').textContent = item.a;
     
+    // 弹窗溢出视窗检测
+    card.style.display = 'block'; 
+    const cWidth = 310; // 固定宽度预估
+    const cHeight = card.offsetHeight || 80;
     let cardLeft = e.clientX;
     let cardTop = e.clientY - 20;
-    card.style.display = 'block'; 
-    const cWidth = card.offsetWidth; const cHeight = card.offsetHeight;
+    
     if(cardLeft + cWidth/2 > window.innerWidth) cardLeft = window.innerWidth - cWidth/2 - 10;
     if(cardLeft - cWidth/2 < 0) cardLeft = cWidth/2 + 10;
-    if(cardTop - cHeight < 0) cardTop = cHeight + 10;
+    if(cardTop - cHeight < 0) cardTop = e.clientY + 30; // 顶部溢出就在下方显示
     
     card.style.left = cardLeft + 'px';
     card.style.top = cardTop + 'px';
     
-    if(cardTimeout) clearTimeout(cardTimeout);
-    cardTimeout = setTimeout(()=>card.style.display='none', 4500);
+    cardTimeout = setTimeout(()=>card.style.display='none', 5000);
   }
 });
 
-// 全局合并鼠标移动监听，保证拖拽极度丝滑
-window.addEventListener('mousemove', e => { 
-  const pos = getMousePos(e);
-  window.mouseX = pos.x; 
-  window.mouseY = pos.y; 
-
-  if(grabbedObj) { 
-    if(grabbedObj.ox !== undefined) { 
-      grabbedObj.x = pos.x + grabbedObj.ox; 
-      grabbedObj.y = pos.y + grabbedObj.oy; 
-    } else { 
-      grabbedObj.x = pos.x; 
-      grabbedObj.y = pos.y; 
-      grabbedObj.climbY = 0; // 猫被抓起时脱离Z轴
-    }
-  } 
-});
-
+// 人为强行社交逻辑
 window.addEventListener('mouseup', e => { 
   if(grabbedObj) { 
     grabbedObj.isGrabbed = false; 
-    if(grabbedObj.state) grabbedObj.state = 'wander'; 
+    if(grabbedObj instanceof Cat) {
+      grabbedObj.state = 'wander'; 
+      grabbedObj.climbY = 0; 
+      
+      // 落地后检测最近的猫，强行交互
+      let closest = null; let minDist = 60;
+      cats.forEach(other => {
+        if(other !== grabbedObj && !other.isGrabbed) {
+           let d = Math.hypot(grabbedObj.x - other.x, grabbedObj.y - other.y);
+           if(d < minDist) { minDist = d; closest = other; }
+        }
+      });
+      
+      if(closest) {
+         grabbedObj.state = 'sniff'; closest.state = 'sniff';
+         grabbedObj.timer = 1500; closest.timer = 1500;
+         grabbedObj.setEmo('❓'); closest.setEmo('❓');
+         
+         setTimeout(() => {
+            if(!grabbedObj.isGrabbed && !closest.isGrabbed) {
+               if(Math.random() < 0.5) {
+                  grabbedObj.state = 'groom'; closest.state = 'groom';
+                  grabbedObj.timer = 4000; closest.timer = 4000;
+                  grabbedObj.x = closest.x - 15; grabbedObj.y = closest.y;
+                  grabbedObj.vx = -1; closest.vx = 1;
+                  grabbedObj.setEmo('♥', 3000); closest.setEmo('♥', 3000);
+               } else {
+                  grabbedObj.state = 'chase_cat'; grabbedObj.targetObj = closest;
+                  grabbedObj.timer = 3000; grabbedObj.setEmo('💢', 1000);
+                  closest.state = 'wander'; closest.vx = (Math.random()-0.5)*5; closest.vy = (Math.random()-0.5)*5;
+               }
+            }
+         }, 1500);
+      }
+    }
     grabbedObj = null; 
   } 
 });
