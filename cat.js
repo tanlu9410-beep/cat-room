@@ -19,7 +19,7 @@ class Cat {
     } else { this.riding = false; }
 
     this.timer -= dt;
-    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom'].includes(this.state);
+    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
     if(busy && this.timer <= 0) {
       if(this.state === 'in_bin' && this.targetObj) this.y += 30; 
       if(this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
@@ -41,17 +41,18 @@ class Cat {
       return; 
     }
 
-    // 核心修复：更聪明的全员上车与拒载逻辑
-    if(gemini.state === 'sweep' && !this.riding && !gemini.rider && !busy && Math.abs(gemini.x - this.x) < 50 && Math.abs(gemini.y - this.y) < 50) {
-      if(Math.random()<0.05) { // 强烈的上车意愿
+    // 修复：更聪明的全员上车与拒载逻辑
+    if(gemini.state === 'sweep' && !this.riding && !gemini.rider && !busy && Math.abs(gemini.x - this.x) < 80 && Math.abs(gemini.y - this.y) < 60) {
+      if(Math.random()<0.05) { 
          let rejectProb = 0;
-         if (this.type === 'black' || this.type === 'grey') rejectProb = 0.8; // 大型猫容易被拒
+         if (this.type === 'black' || this.type === 'grey') rejectProb = 0.8; 
          else if (this.type === 'orange' || this.type === 'cow') rejectProb = 0.4;
          else if (this.type === 'curly') rejectProb = 0.1;
 
          if (Math.random() < rejectProb) {
-             gemini.emo = '💢'; // 扫地机发怒拒载
-             this.vx = (this.x > gemini.x ? 1 : -1) * 3; // 猫被弹开
+             gemini.emo = '💢'; 
+             gemini.vx = (gemini.x > this.x ? 1 : -1) * 2; 
+             this.vx = (this.x > gemini.x ? 1 : -1) * 3; 
              this.setEmo('❓', 1000);
          } else {
              this.riding = true; gemini.rider = this; this.vx = 0; this.vy = 0;
@@ -99,8 +100,15 @@ class Cat {
     if(this.state === 'in_bin' && this.targetObj && this.targetObj.state === 'down') {
       this.x = this.targetObj.x; this.y = this.targetObj.y;
       this.targetObj.x -= 1.5; 
-      if(this.targetObj.x < 50) this.targetObj.x = 50;
-      if(Math.random()<0.02) trashes.push(new Trash(this.x+20, this.y, 2, -2));
+      
+      if(this.targetObj.x <= 50) { 
+        this.targetObj.x = 50;
+        this.targetObj.state = 'up'; 
+        this.state = 'wander'; this.y += 20; this.timer = 2000;
+        this.setEmo('😵', 1500); 
+      } else {
+        if(Math.random()<0.02) trashes.push(new Trash(this.x+20, this.y, 2, -2));
+      }
       return; 
     }
 
@@ -149,15 +157,14 @@ class Cat {
       } 
     });
 
-    // 统天空闲行为分配：优化随机权重，确保舔毛和翻肚皮稳定出现
     if(!busy && this.state === 'wander' && !['curly', 'black', 'cow'].includes(this.type)) {
       if(this.timer <= 0) {
         let r = Math.random();
-        if (this.type === 'grey' && r < 0.35) {
-           this.state = 'self_groom'; this.timer = 4000; this.vx = 0; this.vy = 0;
-        } else if (this.type === 'orange' && r < 0.35) {
-           this.state = 'belly'; this.timer = 4000; this.vx = 0; this.vy = 0;
-        } else if (r < 0.15) {
+        if (this.type === 'grey' && r < 0.4) {
+           this.state = 'self_groom'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (this.type === 'orange' && r < 0.4) {
+           this.state = 'belly'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (r < 0.6) {
            this.state = 'sleep'; this.timer = 3000; this.setEmo('💤', 3000); this.vx = 0; this.vy = 0;
         } else {
            const a = Math.random()*Math.PI*2; this.vx = Math.cos(a)*1.5; this.vy = Math.sin(a)*0.8; this.timer = 2000;
@@ -170,7 +177,15 @@ class Cat {
       if(f) {
         if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
         else if(f.t === 'box' && Math.random()<0.5) { this.state = 'sit_box'; this.targetObj = f; this.timer = 6000; }
-        else if(f.t === 'tree' && Math.random()<0.4) { this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; }
+        else if(f.t === 'tree' && Math.random()<0.5) { 
+            let catsOnTree = cats.filter(c => c.targetObj === f && ['climb', 'sit_tree', 'scratch_tree'].includes(c.state)).length;
+            if(catsOnTree === 0) {
+                this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; 
+            } else if (catsOnTree === 1) {
+                this.state = 'scratch_tree'; this.targetObj = f; this.timer = 4000; 
+                this.x = f.x + (Math.random() < 0.5 ? 15 : -15); 
+            }
+        }
         else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
         else if(f.t === 'yarn' && Math.random()<0.5) { this.state = 'chase_yarn'; this.timer = 5000; }
       }
@@ -196,7 +211,6 @@ class Cat {
   draw() {
     ctx.save(); 
     ctx.translate(this.x, this.y + this.climbY); 
-    // 灰猫黑猫全部变大 2.25倍
     let currentScale = (this.type === 'black' || this.type === 'grey') ? 2.25 : 1.5;
     ctx.scale(currentScale, currentScale);
     
@@ -213,7 +227,7 @@ class Cat {
       ctx.restore(); 
     }
 
-    if(!this.isGrabbed && !['sleep_bed', 'sit_box', 'sit_tree', 'in_bin', 'climb'].includes(this.state) && this.type !== 'black') drawShadow(12, 5);
+    if(!this.isGrabbed && !['sleep_bed', 'sit_box', 'sit_tree', 'in_bin', 'climb', 'scratch_tree'].includes(this.state) && this.type !== 'black') drawShadow(12, 5);
 
     ctx.fillStyle = this.c.body;
     
@@ -229,7 +243,6 @@ class Cat {
       ctx.save(); ctx.translate(0, 6); ctx.rotate(Math.sin(Date.now()*0.03)*0.8); ctx.fillRect(-2,0,4,12); ctx.restore(); 
       ctx.restore();
     } else if(this.state === 'sit_box') {
-      // 探出开口纸箱：只画前半个头和尾巴
       ctx.fillRect(-6,-16,12,10); 
       ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-20,4,5); ctx.fillRect(1,-20,4,5);
       ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-13,2,2); ctx.fillRect(2,-13,2,2);
@@ -273,12 +286,18 @@ class Cat {
         ctx.fillStyle = this.c.body; ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
       }
     } else if(this.state === 'self_groom') {
-      // 灰猫专属：翘起大腿自己舔毛
       ctx.fillRect(-8,-4,16,12); ctx.fillRect(-6,-12,12,10); 
       ctx.fillStyle=this.c.ear; ctx.fillRect(-5,-16,4,5); ctx.fillRect(1,-16,4,5);
       ctx.fillStyle='#1a1a1a'; ctx.fillRect(-4,-7,3,1); ctx.fillRect(1,-7,3,1); 
       ctx.fillStyle = this.c.body;
       ctx.save(); ctx.translate(4, 2); ctx.rotate(-Math.PI/4); ctx.fillRect(0, -10, 4, 12); ctx.restore();
+    } else if(this.state === 'scratch_tree') {
+      ctx.fillRect(-6,-16,12,18); 
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-20,4,5); ctx.fillRect(2,-20,4,5);
+      const scratch = Math.sin(Date.now()*0.02)*4;
+      ctx.fillStyle = this.c.body;
+      ctx.fillRect(-8, -8 + scratch, 4, 6);
+      ctx.fillRect(4, -8 - scratch, 4, 6);
     } else {
       ctx.save();
       if(this.state === 'groom') ctx.translate(0, Math.sin(Date.now()*0.01)*1.5);
@@ -318,9 +337,11 @@ class GeminiBot {
     this.target = null; this.emo = '♪';
     this.emos = ['♥', '✨', '♪', '=_=', '>_<', '🤖'];
     this.cleanMode = false;
+    this.frenzyCooldown = 0;
   }
   update(dt, cats, trashes) {
     this.timer -= dt;
+    this.frenzyCooldown -= dt;
     let unread = trashes.filter(t => !t.isGolden && !t.eaten);
 
     if(this.state === 'idle') {
@@ -328,7 +349,6 @@ class GeminiBot {
         this.state = 'sweep';
         this.cleanMode = unread.length >= 8;
         this.timer = this.cleanMode ? 99999 : 20000; 
-        // 核心修复：给扫地机初速度，让它全向漫游
         let angle = Math.random() * Math.PI * 2;
         let speed = 0.12; 
         this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed * 0.5;
@@ -340,27 +360,25 @@ class GeminiBot {
       let whiteCat = cats.find(c => c.type === 'white');
       let cowCat = cats.find(c => c.type === 'cow');
       
-      // 只有开始扫地时，才会主动等待白猫
       if(!this.rider && whiteCat && Math.abs(whiteCat.x - this.x) < 80 && Math.abs(whiteCat.y - this.y) < 50) {
         this.state = 'wait'; this.timer = 3000; this.emo = '♥';
       }
-      // 狂暴概率极大幅度下调至0.0001
-      else if(cowCat && cowCat.state === 'zoomies' && Math.random()<0.0001) {
-        this.state = 'frenzy'; this.target = cowCat; this.emo = '💢';
+      else if(cowCat && cowCat.state === 'zoomies' && this.frenzyCooldown <= 0) {
+        if(Math.random() < 0.05) {
+            this.state = 'frenzy'; this.target = cowCat; this.emo = '💢';
+        }
+        this.frenzyCooldown = 5000; 
       }
 
-      // 全向二维移动，背猫时减速
       let speedMult = this.rider ? 0.6 : 1;
       this.x += this.vx * speedMult * dt;
       this.y += this.vy * speedMult * dt;
 
-      // 严格的四壁折返，绝不穿墙
       if(this.x < 50) { this.x = 50; this.vx *= -1; }
       if(this.x > W-50) { this.x = W-50; this.vx *= -1; }
       if(this.y < 350) { this.y = 350; this.vy *= -1; }
       if(this.y > H-40) { this.y = H-40; this.vy *= -1; }
 
-      // 缩小扫地判定范围
       trashes.forEach(t => {
         if(!t.eaten && Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 40) {
           t.eaten = true; this.emo = '✨';
@@ -388,16 +406,14 @@ class GeminiBot {
       let dist = Math.hypot(dx, dy);
       if(dist > 0) { this.x += (dx/dist) * 0.4 * dt; this.y += (dy/dist) * 0.4 * dt; }
       
-      // 撞墙必定宕机卡死 30 秒
       if(this.x <= 50 || this.x >= W-50 || this.y <= 350 || this.y >= H-40) {
         this.x = Math.max(50, Math.min(W-50, this.x));
         this.y = Math.max(350, Math.min(H-40, this.y));
-        this.state = 'stuck'; this.timer = 30000; this.emo = '×_×';
+        this.state = 'stuck'; this.timer = 30000; this.emo = '😵';
       }
     }
     else if(this.state === 'stuck') {
       if(this.timer <= 0) {
-        // 自动恢复并吐出金色垃圾
         let golds = trashes.filter(t => t.isGolden);
         if(golds.length >= 4) { 
             let idx = trashes.findIndex(t => t.isGolden);
@@ -413,7 +429,10 @@ class GeminiBot {
     ctx.save(); ctx.translate(this.x,this.y); ctx.scale(2.0, 2.0); 
     drawShadow(16, 6);
     
-    if(this.state === 'stuck') ctx.rotate(Math.sin(Date.now() * 0.05) * 0.2);
+    if(this.state === 'stuck') {
+      ctx.rotate(Math.PI / 2); 
+      ctx.translate(10, -10); 
+    }
     
     let dir = 1;
     if(this.state === 'sweep' || this.state === 'idle') dir = this.vx < 0 ? -1 : 1;
@@ -432,7 +451,6 @@ class GeminiBot {
     
     ctx.scale(dir<0?-1:1, 1);
     
-    // 核心修复：带猫时，表情泡泡抬高防止遮挡
     let emoY = this.rider ? -35 : -15;
     ctx.fillStyle='rgba(60,130,200,0.9)'; ctx.font='bold 10px sans-serif'; 
     ctx.fillText(this.emo, -6, emoY);
