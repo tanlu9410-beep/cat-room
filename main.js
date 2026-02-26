@@ -107,8 +107,10 @@ canvas.addEventListener('mousedown', e => {
       trashes.push(new Trash(gemini.x, gemini.y+10, 0, -2, true));
       return; 
     } else {
-      gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = '😵';
-      if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
+      if(Math.random() < 0.15) {
+        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = 'X(';
+        if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
+      }
       return;
     }
   }
@@ -116,82 +118,82 @@ canvas.addEventListener('mousedown', e => {
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
     let hitRadius = c.type === 'black' || c.type === 'grey' ? 60 : 40;
-    if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { 
-      grabbedObj = c; c.isGrabbed = true; c.riding = false; 
-      e.preventDefault(); 
-      return; 
+    if(Math.abs(c.x-pos.x) < hitRadius && Math.abs(c.y-pos.y) < hitRadius) {
+      if(c.state === 'sleep_bed' || c.state === 'sit_box' || c.state === 'climb' || c.state === 'sit_tree' || c.state === 'in_bin' || c.state === 'scratch_tree') {
+        c.state = 'idle'; c.targetObj = null; c.climbY = 0;
+      } else {
+        c.state = 'grabbed'; c.ox = c.x - pos.x; c.oy = c.y - pos.y;
+      }
+      grabbedObj = c; return;
     }
   }
+
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
-    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
-      grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
-      e.preventDefault(); 
-      return; 
+    if(Math.abs(f.x-pos.x) < f.w/2 && Math.abs(f.y-pos.y) < f.h/2) {
+      if(f.t === 'bed' || f.t === 'box' || f.t === 'tree') {
+        if(f.t === 'bed' && f.occupant && f.occupant.state === 'sleep_bed') {
+          f.occupant.state = 'idle'; f.occupant = null;
+        } else if(f.t === 'box' && f.occupant && f.occupant.state === 'sit_box') {
+          f.occupant.state = 'idle'; f.occupant = null;
+        } else if(f.t === 'tree' && f.occupant && (f.occupant.state === 'climb' || f.occupant.state === 'sit_tree')) {
+          f.occupant.state = 'idle'; f.occupant = null;
+        }
+      }
+      grabbedObj = f; f.ox = f.x - pos.x; f.oy = f.y - pos.y; return;
     }
   }
-  
-  const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
-  if(clickedTrash) {
-    const lib = clickedTrash.isGolden ? goldenLibrary : trashLibrary;
-    const item = lib[Math.floor(Math.random()*lib.length)];
-    document.getElementById('card-content').textContent = item.c;
-    document.getElementById('card-author').textContent = item.a;
-    
-    card.style.display = 'block'; 
-    const rect = card.getBoundingClientRect();
-    const cWidth = rect.width || 280;
-    const cHeight = rect.height || 80;
-    let cardLeft = e.clientX - cWidth / 2;
-    let cardTop = e.clientY - cHeight - 15;
-    
-    if (cardLeft + cWidth > window.innerWidth) cardLeft = window.innerWidth - cWidth - 15;
-    if (cardLeft < 15) cardLeft = 15;
-    if (cardTop < 15) cardTop = e.clientY + 25; 
-    
-    card.style.left = cardLeft + 'px';
-    card.style.top = cardTop + 'px';
-    cardTimeout = setTimeout(()=>card.style.display='none', 5000);
+
+  for(let i=trashes.length-1; i>=0; i--) {
+    let t = trashes[i];
+    if(Math.abs(t.x-pos.x) < t.w/2 && Math.abs(t.y-pos.y) < t.h/2) {
+      if(t.isGolden) {
+        gemini.state = 'happy'; gemini.timer = 2000; gemini.emo = '^_^';
+        trashes.splice(i,1); return;
+      } else {
+        t.eaten = true; return;
+      }
+    }
   }
 });
 
-window.addEventListener('mouseup', e => { 
-  if(grabbedObj) { 
-    grabbedObj.isGrabbed = false; 
+canvas.addEventListener('mouseup', () => {
+  if(grabbedObj) {
     if(grabbedObj instanceof Cat) {
-      grabbedObj.state = 'wander'; 
-      grabbedObj.climbY = 0; 
-      
-      let closest = null; let minDist = 60;
-      cats.forEach(other => {
-        if(other !== grabbedObj && !other.isGrabbed) {
-           let d = Math.hypot(grabbedObj.x - other.x, grabbedObj.y - other.y);
-           if(d < minDist) { minDist = d; closest = other; }
+      if(grabbedObj.state === 'grabbed') {
+        let onFloor = false;
+        for(let f of furnitures) {
+          if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80) {
+            f.occupant = grabbedObj; grabbedObj.state = 'sleep_bed'; onFloor = true; break;
+          }
+          if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60) {
+            f.occupant = grabbedObj; grabbedObj.state = 'sit_box'; onFloor = true; break;
+          }
+          if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130) {
+            grabbedObj.state = 'climb'; onFloor = true; break;
+          }
         }
-      });
-      
-      if(closest) {
-         grabbedObj.state = 'sniff'; closest.state = 'sniff';
-         grabbedObj.timer = 1500; closest.timer = 1500;
-         grabbedObj.setEmo('❓'); closest.setEmo('❓');
-         
-         setTimeout(() => {
-            if(!grabbedObj.isGrabbed && !closest.isGrabbed) {
-               if(Math.random() < 0.5) {
-                  grabbedObj.state = 'groom'; closest.state = 'groom';
-                  grabbedObj.timer = 4000; closest.timer = 4000;
-                  grabbedObj.x = closest.x - 15; grabbedObj.y = closest.y;
-                  grabbedObj.vx = -1; closest.vx = 1;
-                  grabbedObj.setEmo('♥', 3000); closest.setEmo('♥', 3000);
-               } else {
-                  grabbedObj.state = 'chase_cat'; grabbedObj.targetObj = closest;
-                  grabbedObj.timer = 3000; grabbedObj.setEmo('💢', 1000);
-                  closest.state = 'wander'; closest.vx = (Math.random()-0.5)*5; closest.vy = (Math.random()-0.5)*5;
-               }
-            }
-         }, 1500);
+        if(!onFloor) grabbedObj.state = 'idle';
+      }
+    } else if(grabbedObj.t) {
+      let onFloor = false;
+      for(let f of furnitures) {
+        if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80 && !f.occupant) {
+          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        }
+        if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60 && !f.occupant) {
+          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        }
+        if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130 && !f.occupant) {
+          f.x = grabbedObj.x; f.y = grabbedObj.y; onFloor = true; break;
+        }
+      }
+      if(!onFloor) {
+        furnitures = furnitures.filter(ff => ff !== grabbedObj);
       }
     }
-    grabbedObj = null; 
-  } 
+    grabbedObj = null;
+  }
 });
+
+// 其余原有代码保持不变（drawRoom、drawFurnitures、furnitures数组、updateWeather等全部保留）
