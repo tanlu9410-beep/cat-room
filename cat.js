@@ -5,6 +5,7 @@ class Cat {
     this.emo = null; this.emoTimer = 0;
     this.isGrabbed = false; this.riding = false;
     this.targetObj = null; this.climbY = 0; 
+    this.scratchOffsetX = 20; // 预留挠树坐标偏移量
   }
   setEmo(e, time=1500) { this.emo = e; this.emoTimer = time; }
   
@@ -12,8 +13,11 @@ class Cat {
     if(this.isGrabbed) { this.climbY = 0; return; }
     if(this.emoTimer > 0) this.emoTimer -= dt; else this.emo = null;
 
+    // 核心修复：巨猫乘车不穿模
     if(this.riding && gemini.state === 'sweep') {
-      this.x = gemini.x; this.y = gemini.y - 25;
+      this.x = gemini.x; 
+      let yOff = (this.type === 'black' || this.type === 'grey') ? 35 : 25;
+      this.y = gemini.y - yOff;
       if(Math.random()<0.002 || gemini.state !== 'sweep') { this.riding = false; this.vy = -2; gemini.rider = null; }
       return;
     } else { this.riding = false; }
@@ -21,9 +25,11 @@ class Cat {
     this.timer -= dt;
     let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
     
-    // 强制猫咪面向被交互的物体
+    // 核心修复：死死吸附在猫爬架上，拖拽家具时不会隔空挠树
     if (this.state === 'scratch_tree' && this.targetObj) {
-        this.vx = this.x > this.targetObj.x ? -1 : 1;
+        this.x = this.targetObj.x + this.scratchOffsetX;
+        this.y = this.targetObj.y + 10;
+        this.vx = this.scratchOffsetX > 0 ? -1 : 1;
     }
 
     if(busy && this.timer <= 0) {
@@ -56,7 +62,6 @@ class Cat {
 
          if (Math.random() < rejectProb) {
              gemini.emo = '💢'; 
-             // 核心修复：把拒载弹开的速度从 2 降回 0.15，防止变成飙车发癫器
              gemini.vx = (gemini.x > this.x ? 1 : -1) * 0.15; 
              this.vx = (this.x > gemini.x ? 1 : -1) * 3; 
              this.setEmo('❓', 1000);
@@ -107,12 +112,13 @@ class Cat {
       this.x = this.targetObj.x; this.y = this.targetObj.y;
       this.targetObj.x -= 1.5; 
       
-      if(this.targetObj.x <= 50) { 
-        this.targetObj.x = 50;
+      // 核心修复：最多推4秒或撞墙，杜绝全屏长征
+      if(this.targetObj.x <= 50 || this.timer <= 4000) { 
+        if(this.targetObj.x < 50) this.targetObj.x = 50;
         this.targetObj.state = 'up'; 
         this.state = 'wander'; 
         this.y += 20; 
-        this.x += 60; // 给足距离彻底逃出垃圾桶吸附判定圈
+        this.x += 60; 
         this.timer = 3000; 
         this.setEmo('😵', 1500); 
       } else {
@@ -181,7 +187,7 @@ class Cat {
       }
     }
 
-    if(this.state === 'wander' && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
+    if(this.state === 'wander' && this.timer <= 0 && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
         if(f.t === 'bed' && Math.random()<0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
@@ -192,7 +198,8 @@ class Cat {
                 this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; 
             } else if (catsOnTree === 1) {
                 this.state = 'scratch_tree'; this.targetObj = f; this.timer = 4000; 
-                this.x = f.x + (Math.random() < 0.5 ? 20 : -20); 
+                this.scratchOffsetX = (Math.random() < 0.5 ? 20 : -20);
+                this.x = f.x + this.scratchOffsetX; 
                 this.y = f.y + 10; 
             }
         }
