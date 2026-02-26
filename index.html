@@ -53,7 +53,7 @@ const trashLibrary = [
 ];
 const goldenLibrary = [
   { c: "01001000 01001001... 嗝！系统过载吐出的陈年旧码。", a: "⚠️ 扫地机反刍物" },
-  { c: "扫地机器人日记：今天又被奶牛猫逼疯了，但白猫摸了我的头。", a: "🤖 AI核心日记" }
+  { c: "扫地机器人日记：今天又被奶牛猫逼疯了，但卷毛猫一直蹭我。", a: "🤖 AI核心日记" }
 ];
 
 let weather = 'sunny'; 
@@ -65,7 +65,7 @@ function updateWeather(dt) {
   if (weatherTimer <= 0) {
     const ws = ['sunny', 'rain', 'snow'];
     weather = ws[Math.floor(Math.random() * ws.length)];
-    weatherTimer = 10000 + Math.random() * 10000;
+    weatherTimer = 15000 + Math.random() * 10000;
     particles = [];
   }
   
@@ -150,7 +150,7 @@ let furnitures = [
   { t:'bed', x:W-180, y:H-100, w:50, h:25, ox:0, oy:0, state:'normal' },
   { t:'yarn', x:W-300, y:H-80, w:20, h:20, ox:0, oy:0, vx:0, vy:0, state:'normal' },
   { t:'box', x:W-100, y:H-160, w:45, h:35, ox:0, oy:0, state:'normal' },
-  { t:'tree', x:100, y:H-180, w:40, h:80, ox:0, oy:0, state:'normal' },
+  { t:'tree', x:120, y:H-180, w:40, h:80, ox:0, oy:0, state:'normal' },
   { t:'bin', x:W-250, y:H-200, w:25, h:30, ox:0, oy:0, state:'up' }
 ];
 
@@ -203,11 +203,12 @@ class Cat {
     this.emo = null; this.emoTimer = 0;
     this.isGrabbed = false; this.riding = false;
     this.targetObj = null;
+    this.climbY = 0; // 攀爬偏移
   }
   setEmo(e, time=1500) { this.emo = e; this.emoTimer = time; }
   
   update(dt, cats) {
-    if(this.isGrabbed) return;
+    if(this.isGrabbed) { this.climbY = 0; return; }
     if(this.emoTimer > 0) this.emoTimer -= dt; else this.emo = null;
 
     if(this.riding && gemini.state === 'sweep') {
@@ -217,38 +218,75 @@ class Cat {
     } else { this.riding = false; }
 
     this.timer -= dt;
-    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'in_bin', 'window'].includes(this.state);
+    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom'].includes(this.state);
     if(busy && this.timer <= 0) {
-      if(this.state === 'in_bin' && this.targetObj) this.y += 30; // 钻出来往下走点
-      this.state = 'wander'; 
-      this.targetObj = null;
+      if(this.state === 'in_bin' && this.targetObj) this.y += 30; 
+      if(this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
+      else if(this.state !== 'sit_tree') { this.state = 'wander'; this.targetObj = null; this.climbY = 0; }
     }
 
-    // 寄居蟹垃圾桶逻辑
+    // 攀爬过程逻辑
+    if(this.state === 'climb' && this.targetObj) {
+      this.x = this.targetObj.x; 
+      this.climbY -= 0.05 * dt; 
+      if(this.climbY <= -85) { this.climbY = -85; this.state = 'sit_tree'; this.timer = 8000; }
+      return;
+    }
+    if(this.state === 'sit_tree') {
+      if(Math.random()<0.01 && this.timer % 2000 < 50) this.setEmo(Math.random()<0.5?'♥':'♪', 1000);
+      return; 
+    }
+
+    // 黑猫偷窥逻辑
+    if(this.type === 'black') {
+      if(!busy && this.state === 'wander' && Math.random()<0.05) {
+        let f = furnitures.find(f => ['box', 'bed'].includes(f.t));
+        if(f) { this.targetObj = f; this.state = 'hide'; this.timer = 10000; }
+      }
+      if(this.state === 'hide' && this.targetObj) {
+        const dx = this.targetObj.x - this.x, dy = (this.targetObj.y - 15) - this.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if(dist > 5) { this.vx = (dx/dist)*2; this.vy = (dy/dist)*2; }
+        else { this.vx = 0; this.vy = 0; this.x = this.targetObj.x; this.y = this.targetObj.y - 15; }
+      }
+    }
+
+    // 卷毛白猫粘人逻辑
+    if(this.type === 'curly') {
+      if(!busy && this.state === 'wander' && Math.random()<0.05) {
+        let target = (Math.random()<0.3) ? gemini : cats.find(c => c!==this && !c.isGrabbed && c.y > 350);
+        if(target) { this.targetObj = target; this.state = 'cling'; this.timer = 6000; }
+      }
+      if(this.state === 'cling' && this.targetObj) {
+        if(this.timer <= 0) { this.state = 'wander'; this.targetObj = null; }
+        else {
+          const dx = this.targetObj.x - this.x, dy = this.targetObj.y - this.y;
+          const dist = Math.sqrt(dx*dx + dy*dy);
+          if(dist < 40) { this.vx = 0; this.vy = 0; this.setEmo('咕噜咕噜', 500); }
+          else { this.vx = (dx/dist)*1.5; this.vy = (dy/dist)*1.5; } // 爬得慢
+        }
+      }
+    }
+
     if(this.state === 'in_bin' && this.targetObj && this.targetObj.state === 'down') {
       this.x = this.targetObj.x; this.y = this.targetObj.y;
-      this.targetObj.x -= 1.5; // 往左顶
+      this.targetObj.x -= 1.5; 
       if(this.targetObj.x < 50) this.targetObj.x = 50;
       if(Math.random()<0.02) trashes.push(new Trash(this.x+20, this.y, 2, -2));
-      return; // 被困在桶里不执行下面的
+      return; 
     }
 
-    // 追逐毛线球
     if(this.state === 'chase_yarn') {
       let yarn = furnitures.find(f => f.t === 'yarn');
       if(!yarn || this.timer <= 0) { this.state = 'wander'; }
       else {
         const dx = yarn.x - this.x, dy = yarn.y - this.y;
         const dist = Math.sqrt(dx*dx + dy*dy);
-        if(dist < 30) {
-          yarn.vx += dx * 0.2; yarn.vy += dy * 0.2; this.setEmo('✨', 800);
-        } else {
-          this.vx = (dx/dist)*3; this.vy = (dy/dist)*3;
-        }
+        if(dist < 30) { yarn.vx += dx * 0.2; yarn.vy += dy * 0.2; this.setEmo('✨', 800); } 
+        else { this.vx = (dx/dist)*3; this.vy = (dy/dist)*3; }
       }
     }
 
-    // 追逐其他猫
     if(this.state === 'chase_cat' && this.targetObj) {
       if(this.timer <= 0) this.state = 'wander';
       else {
@@ -260,37 +298,42 @@ class Cat {
     }
 
     cats.forEach(other => { 
-      if(other!==this && !other.isGrabbed && !busy && this.state !== 'chase_cat' && this.state !== 'chase_yarn'){ 
+      if(other!==this && !other.isGrabbed && !busy && this.state !== 'chase_cat' && this.state !== 'chase_yarn' && this.state !== 'hide' && this.state !== 'cling'){ 
         const dx=this.x-other.x, dy=this.y-other.y, dist=Math.sqrt(dx*dx+dy*dy); 
-        if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.02) {
+        if(dist<40 && this.state==='wander' && other.state==='wander' && Math.random()<0.03) {
           this.state = 'sniff'; other.state = 'sniff'; this.timer = 1500; other.timer = 1500; this.vx=0; other.vx=0;
           this.setEmo('❓'); other.setEmo('❓');
-          // 互嗅后概率触发追逐战
-          if(Math.random()<0.3) {
-            setTimeout(() => {
-              if(!this.isGrabbed && !other.isGrabbed) {
+          
+          setTimeout(() => {
+            if(!this.isGrabbed && !other.isGrabbed) {
+              if(Math.random() < 0.4) {
+                // 互相舔毛
+                this.state = 'groom'; other.state = 'groom'; 
+                this.timer = 4000; other.timer = 4000;
+                this.x = other.x - 15; this.y = other.y; this.vx = -1; other.vx = 1; // 面对面
+                this.setEmo('♥', 3000); other.setEmo('♥', 3000);
+              } else if(Math.random() < 0.5) {
+                // 追逐
                 this.state = 'chase_cat'; this.targetObj = other; this.timer = 3000; this.setEmo('💢', 1000);
                 other.state = 'wander'; other.vx = (Math.random()-0.5)*5; other.vy = (Math.random()-0.5)*5;
               }
-            }, 1500);
-          }
+            }
+          }, 1500);
         } else if(dist<25){ this.x+=dx*0.05; this.y+=dy*0.05; } 
       } 
     });
 
-    if(this.state === 'wander' && Math.random() < 0.03) {
+    if(this.state === 'wander' && Math.random() < 0.03 && this.type !== 'black' && this.type !== 'curly') {
       let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
       if(f) {
         if(f.t === 'bed' && Math.random()<0.3) { this.state = 'sleep_bed'; this.x = f.x; this.y = f.y-8; this.timer = 8000; this.setEmo('💤', 8000); }
         else if(f.t === 'box' && Math.random()<0.3) { this.state = 'sit_box'; this.x = f.x; this.y = f.y-10; this.timer = 6000; }
-        else if(f.t === 'tree' && Math.random()<0.3) { this.state = 'sit_tree'; this.x = f.x; this.y = f.y-85; this.timer = 6000; this.setEmo('💤', 6000); }
-        else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) {
-          f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000;
-        }
+        else if(f.t === 'tree' && Math.random()<0.4) { this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0; }
+        else if(f.t === 'bin' && f.state === 'up' && Math.random()<0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
         else if(f.t === 'yarn' && Math.random()<0.4) { this.state = 'chase_yarn'; this.timer = 5000; }
       }
       if((weather === 'rain' || weather === 'snow') && Math.random()<0.3 && this.y < 380) {
-        this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo('❗', 1000);
+        this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo(Math.random()<0.5?'♥':'♪', 2000);
       }
     }
 
@@ -299,14 +342,14 @@ class Cat {
         if(Math.random()<0.2) { this.state='zoomies'; this.vx=(Math.random()-0.5)*8; this.vy=(Math.random()-0.5)*3; this.timer=1500; this.setEmo('💢',1500); }
         else { this.vx=(Math.random()-0.5)*1.5; this.vy=(Math.random()-0.5)*0.8; this.timer=1500; }
       }
-    } else if(!busy && this.state === 'wander') {
+    } else if(!busy && this.state === 'wander' && this.type !== 'curly' && this.type !== 'black') {
       if(this.timer<=0) {
         if(Math.random()<0.3) { this.vx=0; this.vy=0; this.state='sleep'; this.timer=3000; this.setEmo('💤', 3000); }
         else { const a=Math.random()*Math.PI*2; this.vx=Math.cos(a)*1.2; this.vy=Math.sin(a)*0.6; this.timer=2000; }
       }
     }
 
-    if(!busy) {
+    if(!busy && this.state !== 'hide' && this.state !== 'climb') {
       this.x += this.vx * dt * 0.05; this.y += this.vy * dt * 0.05;
       this.x = Math.max(50, Math.min(W-50, this.x));
       this.y = Math.max(350, Math.min(H-40, this.y));
@@ -314,12 +357,23 @@ class Cat {
   }
   
   draw() {
-    ctx.save(); ctx.translate(this.x, this.y); ctx.scale(1.5, 1.5);
+    ctx.save(); 
+    // 应用攀爬Y轴偏移
+    ctx.translate(this.x, this.y + this.climbY); 
+    ctx.scale(1.5, 1.5);
     
-    if(this.state === 'window') { } else if(this.vx<0 && !this.isGrabbed && this.state !== 'in_bin') ctx.scale(-1,1);
-    if(this.emo && !this.isGrabbed) { ctx.scale(this.vx<0?-1:1, 1); ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; ctx.fillText(this.emo, -8, -25); ctx.scale(this.vx<0?-1:1, 1); }
+    if(this.state === 'window' || this.state === 'climb') { } 
+    else if(this.vx<0 && !this.isGrabbed && this.state !== 'in_bin') ctx.scale(-1,1);
+    
+    if(this.emo && !this.isGrabbed) { 
+      ctx.save(); ctx.scale(this.vx<0?-1:1, 1); 
+      ctx.fillStyle='#fff'; ctx.font='14px sans-serif'; 
+      if(this.emo === '咕噜咕噜') ctx.font='10px sans-serif';
+      ctx.fillText(this.emo, -8, -25); 
+      ctx.restore(); 
+    }
 
-    if(!this.isGrabbed && !['sleep_bed', 'sit_box', 'sit_tree', 'in_bin'].includes(this.state)) drawShadow(12, 5);
+    if(!this.isGrabbed && !['sleep_bed', 'sit_box', 'sit_tree', 'in_bin', 'climb'].includes(this.state) && this.type !== 'black') drawShadow(12, 5);
 
     ctx.fillStyle = this.c.body;
     
@@ -331,8 +385,8 @@ class Cat {
       ctx.fillStyle=this.c.eye; ctx.fillRect(-4, -8, 2, 2); ctx.fillRect(2, -8, 2, 2);
     } else if(this.state === 'in_bin') {
       ctx.save(); ctx.translate(12, 5); ctx.rotate(Math.PI/2);
-      ctx.fillRect(-6, -4, 12, 10); // 屁股
-      ctx.save(); ctx.translate(0, 6); ctx.rotate(Math.sin(Date.now()*0.03)*0.8); ctx.fillRect(-2,0,4,12); ctx.restore(); // 疯狂摇尾巴
+      ctx.fillRect(-6, -4, 12, 10); 
+      ctx.save(); ctx.translate(0, 6); ctx.rotate(Math.sin(Date.now()*0.03)*0.8); ctx.fillRect(-2,0,4,12); ctx.restore(); 
       ctx.restore();
     } else if(this.state === 'sit_box') {
       ctx.fillRect(-6,-16,12,10); 
@@ -344,21 +398,58 @@ class Cat {
       ctx.fillRect(-10,-5,20,12); ctx.fillRect(-8,-12,12,10);
       ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-16,4,5); ctx.fillRect(3,-16,4,5);
       ctx.fillStyle='#1a1a1a'; ctx.fillRect(-5,-8,4,1.5); ctx.fillRect(3,-8,4,1.5);
-    } else if(this.state === 'window') {
+      if(this.state === 'sit_tree') { // 树上挂尾巴
+        ctx.fillStyle = this.c.body;
+        ctx.save(); ctx.translate(8, 0); ctx.rotate(Math.PI/2 + Math.sin(Date.now()*0.01)*0.3); ctx.fillRect(0,0,12,4); ctx.restore();
+      }
+    } else if(this.state === 'window' || this.state === 'climb') {
       ctx.fillRect(-8,-8,16,14); ctx.fillRect(-6,-16,12,10); 
       ctx.fillStyle=this.c.ear; ctx.fillRect(-6,-20,4,5); ctx.fillRect(2,-20,4,5);
-      ctx.fillStyle = this.c.body;
-      ctx.save(); ctx.translate(0, 4); ctx.rotate(Math.PI/2 + Math.sin(Date.now()*0.005)*0.2); ctx.fillRect(0,0,14,4); ctx.restore();
+      if(this.state === 'climb') {
+        const climbBounce = Math.sin(Date.now()*0.02)*3;
+        ctx.fillRect(-10, -4+climbBounce, 4, 6); ctx.fillRect(6, -4-climbBounce, 4, 6); // 爬树爪子
+      } else {
+        ctx.fillStyle = this.c.body;
+        ctx.save(); ctx.translate(0, 4); ctx.rotate(Math.PI/2 + Math.sin(Date.now()*0.005)*0.2); ctx.fillRect(0,0,14,4); ctx.restore();
+      }
+    } else if(this.type === 'curly') {
+      // 卷毛瘫痪猫特殊绘制：拖着后腿
+      ctx.fillRect(-10,0,18,8); ctx.fillRect(-7,-10,12,10);
+      ctx.fillRect(-14,5,6,3); // 拖拉的后腿
+      const moving = Math.abs(this.vx)>0.1 || Math.abs(this.vy)>0.1;
+      const bounce = moving ? Math.sin(Date.now()*0.02)*2 : 0;
+      ctx.fillRect(2,4,4,5-bounce); ctx.fillRect(6,4,4,5+bounce); // 努力发力的前爪
+      ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-14,4,5); ctx.fillRect(3,-14,4,5);
+      ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-6,2,2); ctx.fillRect(4,-6,2,2);
+      // 卷毛纹理
+      ctx.fillStyle='rgba(200,200,200,0.5)'; ctx.beginPath(); ctx.arc(-2,2,2,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(4,2,2,0,Math.PI*2); ctx.fill();
+    } else if(this.type === 'black') {
+      // 黑猫偷窥
+      if(this.state === 'hide') {
+        ctx.fillStyle='#ffe600'; // 亮眼
+        ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2);
+      } else {
+        ctx.fillRect(-9,-8,18,12); ctx.fillRect(-7,-15,12,10);
+        ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-19,4,5); ctx.fillRect(3,-19,4,5);
+        ctx.fillStyle='#ffe600'; ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2);
+        ctx.fillStyle = this.c.body; ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
+      }
     } else {
+      ctx.save();
+      // 互相舔毛头部起伏
+      if(this.state === 'groom') ctx.translate(0, Math.sin(Date.now()*0.01)*1.5);
       ctx.fillRect(-9,-8,18,12); ctx.fillRect(-7,-15,12,10);
       const moving = Math.abs(this.vx)>0.1 || Math.abs(this.vy)>0.1;
       const bounce = moving ? Math.sin(Date.now()*0.02)*2 : 0;
       ctx.fillRect(-8,4,4,5-bounce); ctx.fillRect(4,4,4,5+bounce);
       ctx.fillStyle=this.c.ear; ctx.fillRect(-7,-19,4,5); ctx.fillRect(3,-19,4,5);
-      ctx.fillStyle=this.c.eye; ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2);
+      ctx.fillStyle=this.state==='groom'?'#1a1a1a':this.c.eye; 
+      if(this.state==='groom') { ctx.fillRect(-4,-11,3,1); ctx.fillRect(4,-11,3,1); } // 闭眼享受
+      else { ctx.fillRect(-4,-11,2,2); ctx.fillRect(4,-11,2,2); }
       if(this.type === 'cow') { ctx.fillStyle='#222'; ctx.fillRect(-9,-8,8,6); ctx.fillRect(1,-5,8,7); ctx.fillRect(-7,-15,5,5); }
       ctx.fillStyle = this.c.body;
       ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now()*0.01)*0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -392,11 +483,9 @@ class GeminiBot {
       }
 
       this.x += this.dir * (this.rider ? 0.08 : 0.12) * dt;
-      // 撞墙折返
       if(this.x < 50) { this.x = 50; this.dir = 1; this.emo = this.emos[Math.floor(Math.random()*this.emos.length)]; }
       if(this.x > W-50) { this.x = W-50; this.dir = -1; this.emo = this.emos[Math.floor(Math.random()*this.emos.length)]; }
 
-      // 扶正垃圾桶
       let bin = furnitures.find(f => f.t === 'bin');
       if(bin && bin.state === 'down' && Math.abs(this.x - bin.x) < 60 && Math.abs(this.y - bin.y) < 40) {
         bin.state = 'up'; this.emo = '✨';
@@ -424,7 +513,7 @@ class GeminiBot {
   }
   
   draw() {
-    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(2.0, 2.0); // 放大1.5倍左右 (基于原有1.5再微调)
+    ctx.save(); ctx.translate(this.x,this.y); ctx.scale(2.0, 2.0); 
     drawShadow(16, 6);
     
     if(this.state === 'hiccup') ctx.rotate(Math.sin(Date.now() * 0.05) * 0.2);
@@ -434,7 +523,6 @@ class GeminiBot {
     ctx.translate(0, yOffset);
 
     ctx.fillStyle='#5ba4d4'; ctx.fillRect(-10,-10,20,16); ctx.fillStyle='#d0eeff'; ctx.fillRect(-7,-8,14,8);
-    
     ctx.fillStyle=(this.state==='frenzy' || this.state==='hiccup')?'#ff0000':'#2060a0'; 
     ctx.fillRect(-5,-6,3,3); ctx.fillRect(2,-6,3,3); 
     
@@ -451,9 +539,9 @@ class GeminiBot {
 
 const cats = [
   new Cat('white', W/2-50, {body:'#e6dfd3', ear:'#d4c5b0', eye:'#5c8a6d'}),
-  new Cat('grey', W/2, {body:'#9e968d', ear:'#827a70', eye:'#4a6b82'}),
-  new Cat('orange', W/2+50, {body:'#e0ab67', ear:'#c28b4a', eye:'#7b5c94'}),
-  new Cat('cow', W/2+100, {body:'#f5f5f5', ear:'#222222', eye:'#d4af37'})
+  new Cat('cow', W/2+100, {body:'#f5f5f5', ear:'#222222', eye:'#d4af37'}),
+  new Cat('black', W/2-100, {body:'#1a1a1a', ear:'#0a0a0a', eye:'#ffe600'}),
+  new Cat('curly', W/2+150, {body:'#fdf8f5', ear:'#f4e4e0', eye:'#8bbab4'})
 ];
 const gemini = new GeminiBot();
 let trashes = [];
@@ -473,12 +561,19 @@ function loop(ts) {
   }
   
   let entities = [...furnitures, ...trashes, ...cats];
-  // 核心：深度排序重构，让猫和家具的物理遮挡真正生效
+  // 复杂的深度排序：涵盖攀爬、箱内、掩体后和普通遮挡
   entities.sort((a,b) => {
     let ay = a.y, by = b.y;
-    // 如果是站在家具上的猫，强行增加渲染层级高度，确保画在家具上面
-    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'sit_tree', 'in_bin'].includes(a.state)) ay += 100;
-    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'sit_tree', 'in_bin'].includes(b.state)) by += 100;
+    if(a instanceof Cat) {
+      if(a.state === 'sit_box' || a.state === 'in_bin') ay += 100;
+      if(a.state === 'climb' || a.state === 'sit_tree') ay += 200; // 树上永远盖住下面
+      if(a.state === 'hide') ay -= 50; // 强行躲在家具后面
+    }
+    if(b instanceof Cat) {
+      if(b.state === 'sit_box' || b.state === 'in_bin') by += 100;
+      if(b.state === 'climb' || b.state === 'sit_tree') by += 200;
+      if(b.state === 'hide') by -= 50;
+    }
     if(a.isGrabbed) ay += 1000; if(b.isGrabbed) by += 1000; 
     return ay - by;
   });
@@ -504,7 +599,6 @@ let grabbedObj = null, cardTimeout = null;
 canvas.addEventListener('mousedown', e => {
   const pos = getMousePos(e);
   
-  // 强制冷静：点扫地机器人
   if(Math.abs(gemini.x - pos.x) < 50 && Math.abs(gemini.y - pos.y) < 50) {
     if(gemini.state === 'frenzy') { gemini.state = 'idle'; gemini.timer = 3000; gemini.emo = '×_×'; return; }
     if(gemini.state === 'sweep') { gemini.emo = '♥'; }
@@ -512,7 +606,7 @@ canvas.addEventListener('mousedown', e => {
   
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
-    if(Math.abs(c.x-pos.x)<40 && Math.abs(c.y-pos.y)<40) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
+    if(Math.abs(c.x-pos.x)<40 && Math.abs((c.y+c.climbY)-pos.y)<40) { grabbedObj = c; c.isGrabbed = true; c.riding = false; return; }
   }
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
@@ -525,7 +619,6 @@ canvas.addEventListener('mousedown', e => {
     document.getElementById('card-content').textContent = item.c;
     document.getElementById('card-author').textContent = item.a;
     
-    // 弹窗定位修正：绝不超出屏幕边界
     let cardLeft = e.clientX;
     let cardTop = e.clientY - 20;
     card.style.display = 'block'; 
@@ -546,7 +639,7 @@ window.addEventListener('mousemove', e => {
   if(grabbedObj) { 
     const pos = getMousePos(e);
     if(grabbedObj.ox !== undefined) { grabbedObj.x = pos.x + grabbedObj.ox; grabbedObj.y = pos.y + grabbedObj.oy; }
-    else { grabbedObj.x = pos.x; grabbedObj.y = pos.y; }
+    else { grabbedObj.x = pos.x; grabbedObj.y = pos.y; grabbedObj.climbY = 0; }
   } 
 });
 
