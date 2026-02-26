@@ -3,13 +3,13 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 
 const trashLibrary = [ 
-  { c: "猫的鼻子纹路就像人类的指纹，每只猫都独一无二。", a: "🐾 喵星解码" }, 
+  { c: "猫的呼噜声频率在20-140赫兹之间，能促进骨骼愈合。", a: "🦴 喵星医疗学" }, 
   { c: "《塞尔达传说》的灵感来自宫本茂小时候在京都野外探索的经历。", a: "🗡️ 海拉鲁拾遗" }, 
   { c: "你今天很棒。如果没人跟你说，那纸团告诉你。", a: "📄 揉皱的纸团" }
 ];
 const goldenLibrary = [
   { c: "01001000 01001001... 嗝！系统过载吐出的陈年旧码。", a: "⚠️ 扫地机反刍物" },
-  { c: "扫地机器人日记：今天又被奶牛猫逼疯了，但卷毛猫一直蹭我。", a: "🤖 AI核心日记" }
+  { c: "扫地机器人日记：今天又被奶牛猫逼疯了，但白猫摸了我的头。", a: "🤖 AI核心日记" }
 ];
 
 let weather = 'sunny'; 
@@ -126,10 +126,13 @@ function drawFurnitures() {
       ctx.fillStyle='#658bad'; ctx.beginPath(); ctx.ellipse(0,-6, 20, 9, 0, 0, Math.PI*2); ctx.fill();
     } else if(f.t === 'box') {
       if(!f.isGrabbed) drawShadow(25, 12);
-      ctx.fillStyle='#604830'; ctx.fillRect(-18,-18,36,20); // 内部深色空间
-      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-5,40,15); // 纸箱前挡板（敞口设计）
-      ctx.fillStyle='#a8855e'; ctx.fillRect(-20,-18,2,15); ctx.fillRect(18,-18,2,15); // 两侧打开的纸页
-      ctx.fillRect(-20,-5,40,3); // 前面翻折的纸页
+      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-15,40,30); // 整体外壳
+      ctx.fillStyle='#604830'; ctx.fillRect(-16,-12,32,24); // 顶部黑洞（开口朝上）
+      ctx.fillStyle='#a8855e'; 
+      ctx.fillRect(-20,-20,40,5); // 后翻盖
+      ctx.fillRect(-20,15,40,5);  // 前翻盖
+      ctx.fillRect(-25,-15,5,30); // 左翻盖
+      ctx.fillRect(20,-15,5,30);  // 右翻盖
     } else if(f.t === 'tree') {
       if(!f.isGrabbed) drawShadow(25, 12);
       ctx.fillStyle='#9e8d73'; ctx.fillRect(-20,5,40,8);
