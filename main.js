@@ -53,12 +53,17 @@ function loop(ts) {
   let entities = [...furnitures, ...trashes, ...cats];
   
   entities.sort((a,b) => {
-    let ay = a.y || 400, by = b.y || 400;
+    let ay = a.y, by = b.y;
+    
     if(a.t === 'bed') ay -= 25; else if (a.t === 'tree' || a.t === 'box') ay -= 5;
     if(b.t === 'bed') by -= 25; else if (b.t === 'tree' || b.t === 'box') by -= 5;
 
-    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(a.state) && a.targetObj) ay = a.targetObj.y + 1; 
-    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(b.state) && b.targetObj) by = b.targetObj.y + 1;
+    if(a instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(a.state) && a.targetObj) {
+      ay = a.targetObj.y + 1; 
+    }
+    if(b instanceof Cat && ['sleep_bed', 'sit_box', 'climb', 'sit_tree', 'in_bin', 'scratch_tree'].includes(b.state) && b.targetObj) {
+      by = b.targetObj.y + 1;
+    }
     
     if(a instanceof Cat && a.state === 'hide') ay -= 50; 
     if(b instanceof Cat && b.state === 'hide') by -= 50;
@@ -102,10 +107,8 @@ canvas.addEventListener('mousedown', e => {
       trashes.push(new Trash(gemini.x, gemini.y+10, 0, -2, true));
       return; 
     } else {
-      if(Math.random() < 0.15) {
-        gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = 'X(';
-        if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
-      }
+      gemini.state = 'stuck'; gemini.timer = 5000; gemini.emo = '😵';
+      if(gemini.rider) { gemini.rider.riding = false; gemini.rider.vy = -2; gemini.rider = null; }
       return;
     }
   }
@@ -113,57 +116,82 @@ canvas.addEventListener('mousedown', e => {
   for(let i=cats.length-1; i>=0; i--) {
     let c = cats[i];
     let hitRadius = c.type === 'black' || c.type === 'grey' ? 60 : 40;
-    if(Math.abs(c.x-pos.x) < hitRadius && Math.abs(c.y-pos.y) < hitRadius) {
-      if(c.state === 'sleep_bed' || c.state === 'sit_box' || c.state === 'climb' || c.state === 'sit_tree' || c.state === 'in_bin' || c.state === 'scratch_tree') {
-        c.state = 'wander'; c.targetObj = null; c.climbY = 0;
-      } else {
-        c.isGrabbed = true;
-        c.ox = c.x - pos.x; c.oy = c.y - pos.y;
-      }
-      grabbedObj = c; return;
+    if(Math.abs(c.x-pos.x)<hitRadius && Math.abs((c.y+c.climbY)-pos.y)<hitRadius) { 
+      grabbedObj = c; c.isGrabbed = true; c.riding = false; 
+      e.preventDefault(); 
+      return; 
     }
   }
-
   for(let i=furnitures.length-1; i>=0; i--) {
     let f = furnitures[i];
-    if(Math.abs(f.x-pos.x) < f.w/2 && Math.abs(f.y-pos.y) < f.h/2) {
-      grabbedObj = f; f.ox = f.x - pos.x; f.oy = f.y - pos.y; return;
+    if(Math.abs(f.x-pos.x)<f.w*2 && Math.abs(f.y-pos.y)<f.h*2) { 
+      grabbedObj = f; f.isGrabbed = true; f.ox = f.x-pos.x; f.oy = f.y-pos.y; 
+      e.preventDefault(); 
+      return; 
     }
   }
-
-  for(let i=trashes.length-1; i>=0; i--) {
-    let t = trashes[i];
-    if(Math.abs(t.x-pos.x) < t.w/2 && Math.abs(t.y-pos.y) < t.h/2) {
-      if(t.isGolden) {
-        gemini.state = 'happy'; gemini.timer = 2000; gemini.emo = '^_^';
-        trashes.splice(i,1); return;
-      } else {
-        t.eaten = true; return;
-      }
-    }
+  
+  const clickedTrash = trashes.find(t=>!t.scattered && Math.abs(t.x-pos.x)<25 && Math.abs(t.y-pos.y)<25);
+  if(clickedTrash) {
+    const lib = clickedTrash.isGolden ? goldenLibrary : trashLibrary;
+    const item = lib[Math.floor(Math.random()*lib.length)];
+    document.getElementById('card-content').textContent = item.c;
+    document.getElementById('card-author').textContent = item.a;
+    
+    card.style.display = 'block'; 
+    const rect = card.getBoundingClientRect();
+    const cWidth = rect.width || 280;
+    const cHeight = rect.height || 80;
+    let cardLeft = e.clientX - cWidth / 2;
+    let cardTop = e.clientY - cHeight - 15;
+    
+    if (cardLeft + cWidth > window.innerWidth) cardLeft = window.innerWidth - cWidth - 15;
+    if (cardLeft < 15) cardLeft = 15;
+    if (cardTop < 15) cardTop = e.clientY + 25; 
+    
+    card.style.left = cardLeft + 'px';
+    card.style.top = cardTop + 'px';
+    cardTimeout = setTimeout(()=>card.style.display='none', 5000);
   }
 });
 
-canvas.addEventListener('mouseup', () => {
-  if(grabbedObj) {
+window.addEventListener('mouseup', e => { 
+  if(grabbedObj) { 
+    grabbedObj.isGrabbed = false; 
     if(grabbedObj instanceof Cat) {
-      grabbedObj.isGrabbed = false;
-      let onFloor = false;
-      for(let f of furnitures) {
-        if(f.t === 'bed' && Math.abs(f.x - grabbedObj.x) < 80 && Math.abs(f.y - grabbedObj.y) < 80) {
-          grabbedObj.state = 'sleep_bed'; grabbedObj.targetObj = f; onFloor = true; break;
+      grabbedObj.state = 'wander'; 
+      grabbedObj.climbY = 0; 
+      
+      let closest = null; let minDist = 60;
+      cats.forEach(other => {
+        if(other !== grabbedObj && !other.isGrabbed) {
+           let d = Math.hypot(grabbedObj.x - other.x, grabbedObj.y - other.y);
+           if(d < minDist) { minDist = d; closest = other; }
         }
-        if(f.t === 'box' && Math.abs(f.x - grabbedObj.x) < 60 && Math.abs(f.y - grabbedObj.y) < 60) {
-          grabbedObj.state = 'sit_box'; grabbedObj.targetObj = f; onFloor = true; break;
-        }
-        if(f.t === 'tree' && Math.abs(f.x - grabbedObj.x) < 130 && Math.abs(f.y - grabbedObj.y) < 130) {
-          grabbedObj.state = 'climb'; grabbedObj.targetObj = f; onFloor = true; break;
-        }
+      });
+      
+      if(closest) {
+         grabbedObj.state = 'sniff'; closest.state = 'sniff';
+         grabbedObj.timer = 1500; closest.timer = 1500;
+         grabbedObj.setEmo('❓'); closest.setEmo('❓');
+         
+         setTimeout(() => {
+            if(!grabbedObj.isGrabbed && !closest.isGrabbed) {
+               if(Math.random() < 0.5) {
+                  grabbedObj.state = 'groom'; closest.state = 'groom';
+                  grabbedObj.timer = 4000; closest.timer = 4000;
+                  grabbedObj.x = closest.x - 15; grabbedObj.y = closest.y;
+                  grabbedObj.vx = -1; closest.vx = 1;
+                  grabbedObj.setEmo('♥', 3000); closest.setEmo('♥', 3000);
+               } else {
+                  grabbedObj.state = 'chase_cat'; grabbedObj.targetObj = closest;
+                  grabbedObj.timer = 3000; grabbedObj.setEmo('💢', 1000);
+                  closest.state = 'wander'; closest.vx = (Math.random()-0.5)*5; closest.vy = (Math.random()-0.5)*5;
+               }
+            }
+         }, 1500);
       }
-      if(!onFloor) grabbedObj.state = 'wander';
-    } else if(grabbedObj.t) {
-      grabbedObj = null;
     }
-    grabbedObj = null;
-  }
+    grabbedObj = null; 
+  } 
 });
