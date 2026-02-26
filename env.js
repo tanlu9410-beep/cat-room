@@ -15,7 +15,7 @@ const goldenLibrary = [
 let weather = 'sunny'; 
 let weatherTimer = 5000;
 let particles = [];
-let trashes = []; // 全局垃圾数组
+let trashes = []; 
 
 function updateWeather(dt) {
   weatherTimer -= dt;
@@ -126,9 +126,10 @@ function drawFurnitures() {
       ctx.fillStyle='#658bad'; ctx.beginPath(); ctx.ellipse(0,-6, 20, 9, 0, 0, Math.PI*2); ctx.fill();
     } else if(f.t === 'box') {
       if(!f.isGrabbed) drawShadow(25, 12);
-      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-20,40,25);
-      ctx.fillStyle='#604830'; ctx.fillRect(-18,-18,36,20); 
-      ctx.fillStyle='#a8855e'; ctx.fillRect(-20,-24,40,4); ctx.fillRect(-22,-20,2,25);
+      ctx.fillStyle='#604830'; ctx.fillRect(-18,-18,36,20); // 内部深色空间
+      ctx.fillStyle='#8b6a47'; ctx.fillRect(-20,-5,40,15); // 纸箱前挡板（敞口设计）
+      ctx.fillStyle='#a8855e'; ctx.fillRect(-20,-18,2,15); ctx.fillRect(18,-18,2,15); // 两侧打开的纸页
+      ctx.fillRect(-20,-5,40,3); // 前面翻折的纸页
     } else if(f.t === 'tree') {
       if(!f.isGrabbed) drawShadow(25, 12);
       ctx.fillStyle='#9e8d73'; ctx.fillRect(-20,5,40,8);
