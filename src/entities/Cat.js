@@ -1,0 +1,353 @@
+import { ctx, drawShadow } from '../canvas.js';
+import { W, H, FLOOR_Y, BOUND_PAD, BOUND_PAD_SMALL,
+         CAT_INIT_Y, CAT_MOVE_SPEED_MULT, CAT_BIG_SCALE, CAT_NORMAL_SCALE,
+         CAT_BIG_RIDER_OFFSET, CAT_NORMAL_RIDER_OFFSET,
+         CAT_TREE_TOP_Y, CAT_CLIMB_SPEED } from '../config.js';
+import { state } from '../state.js';
+import { Trash } from './Trash.js';
+
+export class Cat {
+  constructor(type, x, c) {
+    this.type = type; this.x = x; this.y = CAT_INIT_Y; this.c = c;
+    this.state = 'wander'; this.vx = 0; this.vy = 0; this.timer = 0;
+    this.emo = null; this.emoTimer = 0;
+    this.isGrabbed = false; this.riding = false;
+    this.targetObj = null; this.climbY = 0;
+    this.scratchOffsetX = 20;
+  }
+
+  setEmo(e, time = 1500) { this.emo = e; this.emoTimer = time; }
+
+  update(dt, world) {
+    const { cats, gemini, trashes, furnitures, weather } = world;
+    if (this.isGrabbed) { this.climbY = 0; return; }
+    if (this.emoTimer > 0) this.emoTimer -= dt; else this.emo = null;
+
+    if (this.riding && gemini.state === 'sweep') {
+      this.x = gemini.x;
+      let yOff = (this.type === 'black' || this.type === 'grey') ? CAT_BIG_RIDER_OFFSET : CAT_NORMAL_RIDER_OFFSET;
+      this.y = gemini.y - yOff;
+      if (Math.random() < 0.002 || gemini.state !== 'sweep') { this.riding = false; this.vy = -2; gemini.rider = null; }
+      return;
+    } else { this.riding = false; }
+
+    this.timer -= dt;
+    let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
+
+    if (this.state === 'scratch_tree' && this.targetObj) {
+      this.x = this.targetObj.x + this.scratchOffsetX;
+      this.y = this.targetObj.y + 10;
+      this.vx = this.scratchOffsetX > 0 ? -1 : 1;
+    }
+
+    if (busy && this.timer <= 0) {
+      if (this.state === 'in_bin' && this.targetObj) this.y += 30;
+      if (this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
+      else if (this.state !== 'sit_tree') { this.state = 'wander'; this.targetObj = null; this.climbY = 0; }
+    }
+
+    if (this.state === 'sit_box' && this.targetObj) { this.x = this.targetObj.x; this.y = this.targetObj.y; }
+    if (this.state === 'sleep_bed' && this.targetObj) { this.x = this.targetObj.x; this.y = this.targetObj.y - 8; }
+    if (this.state === 'sit_tree' && this.targetObj) { this.x = this.targetObj.x; this.y = this.targetObj.y; this.climbY = CAT_TREE_TOP_Y; }
+
+    if (this.state === 'climb' && this.targetObj) {
+      this.x = this.targetObj.x;
+      this.climbY -= CAT_CLIMB_SPEED * dt;
+      if (this.climbY <= CAT_TREE_TOP_Y) { this.climbY = CAT_TREE_TOP_Y; this.state = 'sit_tree'; this.timer = 8000; }
+      return;
+    }
+    if (this.state === 'sit_tree') {
+      if (Math.random() < 0.01 && this.timer % 2000 < 50) this.setEmo(Math.random() < 0.5 ? '♥' : '♪', 1000);
+      return;
+    }
+
+    if (gemini.state === 'sweep' && !this.riding && !gemini.rider && !busy && Math.abs(gemini.x - this.x) < 80 && Math.abs(gemini.y - this.y) < 60) {
+      if (Math.random() < 0.05) {
+        let rejectProb = 0;
+        if (this.type === 'black' || this.type === 'grey') rejectProb = 0.8;
+        else if (this.type === 'orange' || this.type === 'cow') rejectProb = 0.4;
+        else if (this.type === 'curly') rejectProb = 0.1;
+
+        if (Math.random() < rejectProb) {
+          gemini.emo = '💢';
+          gemini.vx = (gemini.x > this.x ? 1 : -1) * 0.15;
+          this.vx = (this.x > gemini.x ? 1 : -1) * 3;
+          this.setEmo('❓', 1000);
+        } else {
+          this.riding = true; gemini.rider = this; this.vx = 0; this.vy = 0;
+        }
+      }
+    }
+
+    if (this.type === 'black') {
+      if (!busy && this.state === 'wander' && Math.random() < 0.05) {
+        let f = furnitures.find(f => ['box', 'bed'].includes(f.t));
+        if (f) { this.targetObj = f; this.state = 'hide'; this.timer = 10000; }
+      }
+      if (this.state === 'hide' && this.targetObj) {
+        const dx = this.targetObj.x - this.x, dy = (this.targetObj.y - 15) - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 5) { this.vx = (dx / dist) * 2; this.vy = (dy / dist) * 2; }
+        else { this.vx = 0; this.vy = 0; this.x = this.targetObj.x; this.y = this.targetObj.y - 15; }
+      }
+    }
+
+    if (this.type === 'curly') {
+      if (!busy && this.state === 'wander' && Math.random() < 0.05) {
+        let target = (Math.random() < 0.3) ? gemini : cats.find(c => c !== this && !c.isGrabbed && c.y > FLOOR_Y);
+        if (target) { this.targetObj = target; this.state = 'cling'; this.timer = 6000; }
+      }
+      if (this.state === 'cling' && this.targetObj) {
+        if (this.timer <= 0) { this.state = 'wander'; this.targetObj = null; }
+        else {
+          const dx = this.targetObj.x - this.x, dy = this.targetObj.y - this.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 40) { this.vx = 0; this.vy = 0; this.setEmo('咕噜咕噜', 500); }
+          else { this.vx = (dx / dist) * 1.5; this.vy = (dy / dist) * 1.5; }
+        }
+      }
+    }
+
+    if (this.type === 'white' && this.state === 'wander' && Math.random() < 0.2) {
+      trashes.forEach(t => {
+        if (!t.scattered && Math.abs(t.x - this.x) < 40 && Math.abs(t.y - this.y) < 30) {
+          t.vx += (t.x - this.x) * 0.15; t.vy += (t.y - this.y) * 0.15;
+        }
+      });
+    }
+
+    if (this.state === 'in_bin' && this.targetObj && this.targetObj.state === 'down') {
+      this.x = this.targetObj.x; this.y = this.targetObj.y;
+      this.targetObj.x -= 1.5;
+
+      if (this.targetObj.x <= BOUND_PAD || this.timer <= 4000) {
+        if (this.targetObj.x < BOUND_PAD) this.targetObj.x = BOUND_PAD;
+        this.targetObj.state = 'up';
+        this.state = 'wander';
+        this.y += 20;
+        this.x += 60;
+        this.timer = 3000;
+        this.setEmo('😵', 1500);
+      } else {
+        if (Math.random() < 0.02) trashes.push(new Trash(this.x + 20, this.y, 2, -2));
+      }
+      return;
+    }
+
+    if (this.state === 'chase_yarn') {
+      let yarn = furnitures.find(f => f.t === 'yarn');
+      if (!yarn || this.timer <= 0) { this.state = 'wander'; }
+      else {
+        const dx = yarn.x - this.x, dy = yarn.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 30) { yarn.vx += dx * 0.2; yarn.vy += dy * 0.2; this.setEmo('✨', 800); }
+        else { this.vx = (dx / dist) * 3; this.vy = (dy / dist) * 3; }
+      }
+    }
+
+    if (this.state === 'chase_cat' && this.targetObj) {
+      if (this.timer <= 0) this.state = 'wander';
+      else {
+        const dx = this.targetObj.x - this.x, dy = this.targetObj.y - this.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 20) this.state = 'wander';
+        else { this.vx = (dx / dist) * 4; this.vy = (dy / dist) * 4; }
+      }
+    }
+
+    cats.forEach(other => {
+      if (other !== this && !other.isGrabbed && !busy && this.state !== 'chase_cat' && this.state !== 'chase_yarn' && this.state !== 'hide' && this.state !== 'cling') {
+        const dx = this.x - other.x, dy = this.y - other.y, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 40 && this.state === 'wander' && other.state === 'wander' && Math.random() < 0.02) {
+          this.state = 'sniff'; other.state = 'sniff'; this.timer = 1500; other.timer = 1500; this.vx = 0; other.vx = 0;
+          this.setEmo('❓'); other.setEmo('❓');
+
+          setTimeout(() => {
+            if (!this.isGrabbed && !other.isGrabbed) {
+              if (Math.random() < 0.4) {
+                this.state = 'groom'; other.state = 'groom';
+                this.timer = 4000; other.timer = 4000;
+                this.x = other.x - 15; this.y = other.y; this.vx = -1; other.vx = 1;
+                this.setEmo('♥', 3000); other.setEmo('♥', 3000);
+              } else if (Math.random() < 0.5) {
+                this.state = 'chase_cat'; this.targetObj = other; this.timer = 3000; this.setEmo('💢', 1000);
+                other.state = 'wander'; other.vx = (Math.random() - 0.5) * 5; other.vy = (Math.random() - 0.5) * 5;
+              }
+            }
+          }, 1500);
+        } else if (dist < 25) { this.x += dx * 0.05; this.y += dy * 0.05; }
+      }
+    });
+
+    if (!busy && this.state === 'wander' && !['curly', 'black', 'cow'].includes(this.type)) {
+      if (this.timer <= 0) {
+        let r = Math.random();
+        if (this.type === 'grey' && r < 0.4) {
+          this.state = 'self_groom'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (this.type === 'orange' && r < 0.4) {
+          this.state = 'belly'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (r < 0.6) {
+          this.state = 'sleep'; this.timer = 3000; this.setEmo('💤', 3000); this.vx = 0; this.vy = 0;
+        } else {
+          const a = Math.random() * Math.PI * 2; this.vx = Math.cos(a) * 1.5; this.vy = Math.sin(a) * 0.8; this.timer = 2000;
+        }
+      }
+    }
+
+    if (this.state === 'wander' && this.timer <= 0 && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
+      let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
+      if (f) {
+        if (f.t === 'bed' && Math.random() < 0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
+        else if (f.t === 'box' && Math.random() < 0.5) { this.state = 'sit_box'; this.targetObj = f; this.timer = 6000; }
+        else if (f.t === 'tree' && Math.random() < 0.5) {
+          let catsOnTree = cats.filter(c => c.targetObj === f && ['climb', 'sit_tree', 'scratch_tree'].includes(c.state)).length;
+          if (catsOnTree === 0) {
+            this.state = 'climb'; this.targetObj = f; this.x = f.x; this.timer = 3000; this.climbY = 0;
+          } else if (catsOnTree === 1) {
+            this.state = 'scratch_tree'; this.targetObj = f; this.timer = 4000;
+            this.scratchOffsetX = (Math.random() < 0.5 ? 20 : -20);
+            this.x = f.x + this.scratchOffsetX;
+            this.y = f.y + 10;
+          }
+        }
+        else if (f.t === 'bin' && f.state === 'up' && Math.random() < 0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
+        else if (f.t === 'yarn' && Math.random() < 0.5) { this.state = 'chase_yarn'; this.timer = 5000; }
+      }
+      if ((weather === 'rain' || weather === 'snow') && Math.random() < 0.3 && this.y < 380) {
+        this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo(Math.random() < 0.5 ? '♥' : '♪', 2000);
+      }
+    }
+
+    if (this.type === 'cow' && !busy && this.state === 'wander') {
+      if (this.timer <= 0) {
+        if (Math.random() < 0.4) { this.state = 'zoomies'; this.vx = (Math.random() - 0.5) * 8; this.vy = (Math.random() - 0.5) * 3; this.timer = 1500; this.setEmo('💢', 1500); }
+        else { this.vx = (Math.random() - 0.5) * 1.5; this.vy = (Math.random() - 0.5) * 0.8; this.timer = 1500; }
+      }
+    }
+
+    if (!busy && this.state !== 'hide' && this.state !== 'climb') {
+      this.x += this.vx * dt * CAT_MOVE_SPEED_MULT; this.y += this.vy * dt * CAT_MOVE_SPEED_MULT;
+      this.x = Math.max(BOUND_PAD, Math.min(W - BOUND_PAD, this.x));
+      this.y = Math.max(FLOOR_Y, Math.min(H - BOUND_PAD_SMALL, this.y));
+    }
+  }
+
+  draw() {
+    ctx.save();
+    ctx.translate(this.x, this.y + this.climbY);
+    let currentScale = (this.type === 'black' || this.type === 'grey') ? CAT_BIG_SCALE : CAT_NORMAL_SCALE;
+    ctx.scale(currentScale, currentScale);
+
+    if (this.state === 'window' || this.state === 'climb') { }
+    else if (this.vx < 0 && !this.isGrabbed && this.state !== 'in_bin' && this.state !== 'belly') ctx.scale(-1, 1);
+
+    if (this.state === 'belly') { ctx.scale(1, -1); ctx.translate(0, 4); }
+
+    if (this.emo && !this.isGrabbed) {
+      ctx.save(); ctx.scale(this.vx < 0 ? -1 : 1, 1);
+      ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif';
+      if (this.emo === '咕噜咕噜') ctx.font = '10px sans-serif';
+      ctx.fillText(this.emo, -8, -25);
+      ctx.restore();
+    }
+
+    if (!this.isGrabbed && !['sleep_bed', 'sit_box', 'sit_tree', 'in_bin', 'climb', 'scratch_tree'].includes(this.state) && this.type !== 'black') drawShadow(12, 5);
+
+    ctx.fillStyle = this.c.body;
+
+    if (this.isGrabbed) {
+      const kick = Math.sin(Date.now() * 0.04) * 3;
+      ctx.fillRect(-6, -4, 12, 18); ctx.fillRect(-6, -12, 12, 10);
+      ctx.fillRect(-5, 14, 3, 5 + kick); ctx.fillRect(2, 14, 3, 5 - kick);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-5, -16, 3, 4); ctx.fillRect(2, -16, 3, 4);
+      ctx.fillStyle = this.c.eye; ctx.fillRect(-4, -8, 2, 2); ctx.fillRect(2, -8, 2, 2);
+    } else if (this.state === 'in_bin') {
+      ctx.save(); ctx.translate(12, 5); ctx.rotate(Math.PI / 2);
+      ctx.fillRect(-6, -4, 12, 10);
+      ctx.save(); ctx.translate(0, 6); ctx.rotate(Math.sin(Date.now() * 0.03) * 0.8); ctx.fillRect(-2, 0, 4, 12); ctx.restore();
+      ctx.restore();
+    } else if (this.state === 'sit_box') {
+      ctx.fillRect(-6, -16, 12, 10);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-5, -20, 4, 5); ctx.fillRect(1, -20, 4, 5);
+      ctx.fillStyle = this.c.eye; ctx.fillRect(-4, -13, 2, 2); ctx.fillRect(2, -13, 2, 2);
+      ctx.fillStyle = this.c.body;
+      ctx.save(); ctx.translate(10, -8); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.5); ctx.fillRect(0, 0, 8, 3); ctx.restore();
+    } else if (this.state === 'sleep_bed' || this.state === 'sit_tree' || this.state === 'sleep') {
+      ctx.fillRect(-10, -5, 20, 12); ctx.fillRect(-8, -12, 12, 10);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -16, 4, 5); ctx.fillRect(3, -16, 4, 5);
+      ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-5, -8, 4, 1.5); ctx.fillRect(3, -8, 4, 1.5);
+      if (this.state === 'sit_tree') {
+        ctx.fillStyle = this.c.body;
+        ctx.save(); ctx.translate(8, 0); ctx.rotate(Math.PI / 2 + Math.sin(Date.now() * 0.01) * 0.3); ctx.fillRect(0, 0, 12, 4); ctx.restore();
+      }
+    } else if (this.state === 'window' || this.state === 'climb') {
+      ctx.fillRect(-8, -8, 16, 14); ctx.fillRect(-6, -16, 12, 10);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-6, -20, 4, 5); ctx.fillRect(2, -20, 4, 5);
+      if (this.state === 'climb') {
+        const climbBounce = Math.sin(Date.now() * 0.02) * 3;
+        ctx.fillRect(-10, -4 + climbBounce, 4, 6); ctx.fillRect(6, -4 - climbBounce, 4, 6);
+      } else {
+        ctx.fillStyle = this.c.body;
+        ctx.save(); ctx.translate(0, 4); ctx.rotate(Math.PI / 2 + Math.sin(Date.now() * 0.005) * 0.2); ctx.fillRect(0, 0, 14, 4); ctx.restore();
+      }
+    } else if (this.type === 'curly') {
+      ctx.fillRect(-10, 0, 18, 8); ctx.fillRect(-7, -10, 12, 10);
+      ctx.fillRect(-14, 5, 6, 3);
+      const moving = Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1;
+      const bounce = moving ? Math.sin(Date.now() * 0.02) * 2 : 0;
+      ctx.fillRect(2, 4, 4, 5 - bounce); ctx.fillRect(6, 4, 4, 5 + bounce);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -14, 4, 5); ctx.fillRect(3, -14, 4, 5);
+      ctx.fillStyle = this.c.eye; ctx.fillRect(-4, -6, 2, 2); ctx.fillRect(4, -6, 2, 2);
+      ctx.fillStyle = 'rgba(200,200,200,0.5)'; ctx.beginPath(); ctx.arc(-2, 2, 2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(4, 2, 2, 0, Math.PI * 2); ctx.fill();
+    } else if (this.type === 'black') {
+      if (this.state === 'hide') {
+        ctx.fillStyle = '#ffe600';
+        ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2);
+      } else {
+        ctx.fillRect(-9, -8, 18, 12); ctx.fillRect(-7, -15, 12, 10);
+        ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -19, 4, 5); ctx.fillRect(3, -19, 4, 5);
+        ctx.fillStyle = '#ffe600'; ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2);
+        ctx.fillStyle = this.c.body; ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
+      }
+    } else if (this.state === 'self_groom') {
+      ctx.fillRect(-8, -4, 16, 12); ctx.fillRect(-6, -12, 12, 10);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-5, -16, 4, 5); ctx.fillRect(1, -16, 4, 5);
+      ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-4, -7, 3, 1); ctx.fillRect(1, -7, 3, 1);
+      ctx.fillStyle = this.c.body;
+      ctx.save(); ctx.translate(4, 2); ctx.rotate(-Math.PI / 4); ctx.fillRect(0, -10, 4, 12); ctx.restore();
+    } else if (this.state === 'scratch_tree') {
+      ctx.fillRect(-7, -28, 14, 30);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-6, -32, 4, 5); ctx.fillRect(2, -32, 4, 5);
+      const scratch = Math.sin(Date.now() * 0.02) * 4;
+      ctx.fillStyle = this.c.body;
+      ctx.fillRect(-9, -16 + scratch, 4, 8);
+      ctx.fillRect(5, -16 - scratch, 4, 8);
+    } else {
+      ctx.save();
+      if (this.state === 'groom') ctx.translate(0, Math.sin(Date.now() * 0.01) * 1.5);
+      ctx.fillRect(-9, -8, 18, 12); ctx.fillRect(-7, -15, 12, 10);
+      const moving = Math.abs(this.vx) > 0.1 || Math.abs(this.vy) > 0.1;
+      const bounce = moving ? Math.sin(Date.now() * 0.02) * 2 : 0;
+      ctx.fillRect(-8, 4, 4, 5 - bounce); ctx.fillRect(4, 4, 4, 5 + bounce);
+      ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -19, 4, 5); ctx.fillRect(3, -19, 4, 5);
+      ctx.fillStyle = this.state === 'groom' ? '#1a1a1a' : this.c.eye;
+      if (this.state === 'groom') { ctx.fillRect(-4, -11, 3, 1); ctx.fillRect(4, -11, 3, 1); }
+      else { ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2); }
+      if (this.type === 'cow') { ctx.fillStyle = '#222'; ctx.fillRect(-9, -8, 8, 6); ctx.fillRect(1, -5, 8, 7); ctx.fillRect(-7, -15, 5, 5); }
+
+      let tailAngle = 0;
+      if (this.type === 'grey') {
+        tailAngle = Math.atan2((state.mouseY || H / 2) - this.y, (state.mouseX || W / 2) - this.x);
+        if (this.vx < 0 && !this.isGrabbed) tailAngle = Math.PI - tailAngle;
+      } else {
+        tailAngle = Math.sin(Date.now() * 0.005) * 0.5;
+      }
+      ctx.fillStyle = this.c.body;
+      ctx.save(); ctx.translate(-6, -2); ctx.rotate(tailAngle);
+      ctx.fillRect(-8, -1, 8, 3); ctx.restore();
+
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+}
