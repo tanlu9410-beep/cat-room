@@ -14,6 +14,7 @@ export class Cat {
     this.isGrabbed = false; this.riding = false;
     this.targetObj = null; this.climbY = 0;
     this.scratchOffsetX = 20;
+    this.blinkTimer = 2000 + Math.random() * 3000;
   }
 
   setEmo(e, time = 1500) { this.emo = e; this.emoTimer = time; }
@@ -22,6 +23,8 @@ export class Cat {
     const { cats, gemini, trashes, furnitures, weather } = world;
     if (this.isGrabbed) { this.climbY = 0; return; }
     if (this.emoTimer > 0) this.emoTimer -= dt; else this.emo = null;
+    this.blinkTimer -= dt;
+    if (this.blinkTimer <= 0) this.blinkTimer = 2000 + Math.random() * 4000;
 
     if (this.riding && gemini.state === 'sweep') {
       this.x = gemini.x;
@@ -29,7 +32,7 @@ export class Cat {
       this.y = gemini.y - yOff;
       if (Math.random() < 0.002 || gemini.state !== 'sweep') { this.riding = false; this.vy = -2; gemini.rider = null; }
       return;
-    } else { this.riding = false; }
+    } else { this.riding = false; if (gemini.rider === this) gemini.rider = null; }
 
     this.timer -= dt;
     let busy = ['sniff', 'sleep_bed', 'sit_box', 'sit_tree', 'climb', 'in_bin', 'window', 'hide', 'groom', 'belly', 'self_groom', 'scratch_tree'].includes(this.state);
@@ -43,7 +46,7 @@ export class Cat {
     if (busy && this.timer <= 0) {
       if (this.state === 'in_bin' && this.targetObj) this.y += 30;
       if (this.state === 'climb') { this.state = 'sit_tree'; this.timer = 8000; this.setEmo('💤', 5000); }
-      else if (this.state !== 'sit_tree') { this.state = 'wander'; this.targetObj = null; this.climbY = 0; }
+      else { this.state = 'wander'; this.targetObj = null; this.climbY = 0; }
     }
 
     if (this.state === 'sit_box' && this.targetObj) { this.x = this.targetObj.x; this.y = this.targetObj.y; }
@@ -179,23 +182,21 @@ export class Cat {
       }
     });
 
-    if (!busy && this.state === 'wander' && !['curly', 'black', 'cow'].includes(this.type)) {
-      if (this.timer <= 0) {
-        let r = Math.random();
-        if (this.type === 'grey' && r < 0.4) {
-          this.state = 'self_groom'; this.timer = 5000; this.vx = 0; this.vy = 0;
-        } else if (this.type === 'orange' && r < 0.4) {
-          this.state = 'belly'; this.timer = 5000; this.vx = 0; this.vy = 0;
-        } else if (r < 0.6) {
-          this.state = 'sleep'; this.timer = 3000; this.setEmo('💤', 3000); this.vx = 0; this.vy = 0;
-        } else {
-          const a = Math.random() * Math.PI * 2; this.vx = Math.cos(a) * 1.5; this.vy = Math.sin(a) * 0.8; this.timer = 2000;
-        }
+    // Zoomies: exit check and trash scatter
+    if (this.state === 'zoomies') {
+      if (this.timer <= 0) { this.state = 'wander'; this.timer = 1500; this.vx *= 0.3; this.vy *= 0.3; }
+      else {
+        trashes.forEach(t => {
+          if (!t.scattered && Math.abs(t.x - this.x) < 35 && Math.abs(t.y - this.y) < 30) {
+            t.vx += this.vx * 0.3; t.vy += this.vy * 0.3;
+          }
+        });
       }
     }
 
-    if (this.state === 'wander' && this.timer <= 0 && Math.random() < 0.05 && this.type !== 'black' && this.type !== 'curly') {
-      let f = furnitures.find(f => Math.abs(f.x - this.x) < 50 && Math.abs(f.y - this.y) < 50);
+    // Furniture interaction (runs before generic wander so timer isn't consumed)
+    if (this.state === 'wander' && this.timer <= 0 && Math.random() < 0.08) {
+      let f = furnitures.find(f => Math.abs(f.x - this.x) < 60 && Math.abs(f.y - this.y) < 60);
       if (f) {
         if (f.t === 'bed' && Math.random() < 0.4) { this.state = 'sleep_bed'; this.targetObj = f; this.timer = 8000; this.setEmo('💤', 8000); }
         else if (f.t === 'box' && Math.random() < 0.5) { this.state = 'sit_box'; this.targetObj = f; this.timer = 6000; }
@@ -213,11 +214,38 @@ export class Cat {
         else if (f.t === 'bin' && f.state === 'up' && Math.random() < 0.4) { f.state = 'down'; this.state = 'in_bin'; this.targetObj = f; this.timer = 8000; }
         else if (f.t === 'yarn' && Math.random() < 0.5) { this.state = 'chase_yarn'; this.timer = 5000; }
       }
-      if ((weather === 'rain' || weather === 'snow') && Math.random() < 0.3 && this.y < 380) {
-        this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 4000; this.setEmo(Math.random() < 0.5 ? '♥' : '♪', 2000);
+    }
+
+    // Weather reaction (separate, only when still wandering)
+    if (this.state === 'wander' && this.timer <= 0 && (weather === 'rain' || weather === 'snow') && Math.random() < 0.05) {
+      this.state = 'window'; this.vx = 0; this.vy = 0; this.timer = 5000;
+      this.y = FLOOR_Y; this.x = 200 + Math.random() * 300;
+      this.setEmo(weather === 'rain' ? '🌧' : '❄', 2000);
+    }
+
+    // Random zoomies for any cat (rare event)
+    if (this.state === 'wander' && this.timer <= 0 && this.type !== 'cow' && Math.random() < 0.02) {
+      this.state = 'zoomies'; this.vx = (Math.random() - 0.5) * 7; this.vy = (Math.random() - 0.5) * 3;
+      this.timer = 1500; this.setEmo('!', 1200);
+    }
+
+    // Generic wander timer (direction/sleep/personality actions)
+    if (!busy && this.state === 'wander' && this.type !== 'cow') {
+      if (this.timer <= 0) {
+        let r = Math.random();
+        if (this.type === 'grey' && r < 0.4) {
+          this.state = 'self_groom'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (this.type === 'orange' && r < 0.4) {
+          this.state = 'belly'; this.timer = 5000; this.vx = 0; this.vy = 0;
+        } else if (r < 0.6) {
+          this.state = 'sleep'; this.timer = 3000; this.setEmo('💤', 3000); this.vx = 0; this.vy = 0;
+        } else {
+          const a = Math.random() * Math.PI * 2; this.vx = Math.cos(a) * 1.5; this.vy = Math.sin(a) * 0.8; this.timer = 2000;
+        }
       }
     }
 
+    // Cow-specific wander (zoomies-prone)
     if (this.type === 'cow' && !busy && this.state === 'wander') {
       if (this.timer <= 0) {
         if (Math.random() < 0.4) { this.state = 'zoomies'; this.vx = (Math.random() - 0.5) * 8; this.vy = (Math.random() - 0.5) * 3; this.timer = 1500; this.setEmo('💢', 1500); }
@@ -245,9 +273,13 @@ export class Cat {
 
     if (this.emo && !this.isGrabbed) {
       ctx.save(); ctx.scale(this.vx < 0 ? -1 : 1, 1);
+      const alpha = Math.min(1, this.emoTimer / 400);
+      ctx.globalAlpha = alpha;
+      const floatY = (1 - alpha) * 10;
       ctx.fillStyle = '#fff'; ctx.font = '14px sans-serif';
       if (this.emo === '咕噜咕噜') ctx.font = '10px sans-serif';
-      ctx.fillText(this.emo, -8, -25);
+      ctx.fillText(this.emo, -8, -25 - floatY);
+      ctx.globalAlpha = 1;
       ctx.restore();
     }
 
@@ -269,7 +301,9 @@ export class Cat {
     } else if (this.state === 'sit_box') {
       ctx.fillRect(-6, -16, 12, 10);
       ctx.fillStyle = this.c.ear; ctx.fillRect(-5, -20, 4, 5); ctx.fillRect(1, -20, 4, 5);
-      ctx.fillStyle = this.c.eye; ctx.fillRect(-4, -13, 2, 2); ctx.fillRect(2, -13, 2, 2);
+      ctx.fillStyle = this.c.eye;
+      if (this.blinkTimer < 120) { ctx.fillRect(-4, -13, 3, 1); ctx.fillRect(2, -13, 3, 1); }
+      else { ctx.fillRect(-4, -13, 2, 2); ctx.fillRect(2, -13, 2, 2); }
       ctx.fillStyle = this.c.body;
       ctx.save(); ctx.translate(10, -8); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.5); ctx.fillRect(0, 0, 8, 3); ctx.restore();
     } else if (this.state === 'sleep_bed' || this.state === 'sit_tree' || this.state === 'sleep') {
@@ -297,7 +331,9 @@ export class Cat {
       const bounce = moving ? Math.sin(Date.now() * 0.02) * 2 : 0;
       ctx.fillRect(2, 4, 4, 5 - bounce); ctx.fillRect(6, 4, 4, 5 + bounce);
       ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -14, 4, 5); ctx.fillRect(3, -14, 4, 5);
-      ctx.fillStyle = this.c.eye; ctx.fillRect(-4, -6, 2, 2); ctx.fillRect(4, -6, 2, 2);
+      ctx.fillStyle = this.c.eye;
+      if (this.blinkTimer < 120) { ctx.fillRect(-4, -6, 3, 1); ctx.fillRect(4, -6, 3, 1); }
+      else { ctx.fillRect(-4, -6, 2, 2); ctx.fillRect(4, -6, 2, 2); }
       ctx.fillStyle = 'rgba(200,200,200,0.5)'; ctx.beginPath(); ctx.arc(-2, 2, 2, 0, Math.PI * 2); ctx.fill(); ctx.beginPath(); ctx.arc(4, 2, 2, 0, Math.PI * 2); ctx.fill();
     } else if (this.type === 'black') {
       if (this.state === 'hide') {
@@ -306,7 +342,9 @@ export class Cat {
       } else {
         ctx.fillRect(-9, -8, 18, 12); ctx.fillRect(-7, -15, 12, 10);
         ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -19, 4, 5); ctx.fillRect(3, -19, 4, 5);
-        ctx.fillStyle = '#ffe600'; ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2);
+        ctx.fillStyle = '#ffe600';
+        if (this.blinkTimer < 120) { ctx.fillRect(-4, -11, 3, 1); ctx.fillRect(4, -11, 3, 1); }
+        else { ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2); }
         ctx.fillStyle = this.c.body; ctx.save(); ctx.translate(-8, -3); ctx.rotate(Math.sin(Date.now() * 0.01) * 0.5); ctx.fillRect(-12, -2, 12, 4); ctx.restore();
       }
     } else if (this.state === 'self_groom') {
@@ -331,8 +369,15 @@ export class Cat {
       ctx.fillRect(-8, 4, 4, 5 - bounce); ctx.fillRect(4, 4, 4, 5 + bounce);
       ctx.fillStyle = this.c.ear; ctx.fillRect(-7, -19, 4, 5); ctx.fillRect(3, -19, 4, 5);
       ctx.fillStyle = this.state === 'groom' ? '#1a1a1a' : this.c.eye;
-      if (this.state === 'groom') { ctx.fillRect(-4, -11, 3, 1); ctx.fillRect(4, -11, 3, 1); }
+      if (this.state === 'groom' || this.blinkTimer < 120) { ctx.fillRect(-4, -11, 3, 1); ctx.fillRect(4, -11, 3, 1); }
       else { ctx.fillRect(-4, -11, 2, 2); ctx.fillRect(4, -11, 2, 2); }
+      // Nose
+      ctx.fillStyle = '#d4a0a0'; ctx.fillRect(-1, -8, 2, 1);
+      // Whiskers
+      ctx.strokeStyle = this.c.body === '#1a1a1a' ? 'rgba(80,80,80,0.5)' : 'rgba(150,140,130,0.4)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath(); ctx.moveTo(-5, -9); ctx.lineTo(-14, -12); ctx.moveTo(-5, -7); ctx.lineTo(-14, -5); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(5, -9); ctx.lineTo(14, -12); ctx.moveTo(5, -7); ctx.lineTo(14, -5); ctx.stroke();
       if (this.type === 'cow') { ctx.fillStyle = '#222'; ctx.fillRect(-9, -8, 8, 6); ctx.fillRect(1, -5, 8, 7); ctx.fillRect(-7, -15, 5, 5); }
 
       let tailAngle = 0;
