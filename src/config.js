@@ -46,5 +46,24 @@ export const CAT_NORMAL_RIDER_OFFSET = 25;
 export const CAT_TREE_TOP_Y = -85;
 export const CAT_CLIMB_SPEED = 0.05;
 
+// 猫行为计时器
+export const CAT_SNIFF_TIMER = 1500;
+export const CAT_SLEEP_BED_TIMER = 8000;
+export const CAT_SIT_BOX_TIMER = 6000;
+export const CAT_SIT_TREE_TIMER = 8000;
+export const CAT_SCRATCH_TREE_TIMER = 4000;
+export const CAT_IN_BIN_TIMER = 8000;
+export const CAT_CHASE_YARN_TIMER = 5000;
+export const CAT_WINDOW_TIMER = 4000;
+export const CAT_GROOM_TIMER = 4000;
+export const CAT_CHASE_TIMER = 3000;
+export const CAT_SLEEP_TIMER = 3000;
+export const CAT_SELF_GROOM_TIMER = 5000;
+export const CAT_BELLY_TIMER = 5000;
+export const CAT_WANDER_TIMER = 2000;
+export const CAT_ZOOMIES_TIMER = 1500;
+export const CAT_HIDE_TIMER = 10000;
+export const CAT_CLING_TIMER = 6000;
+
 // 家具毛线球摩擦
 export const YARN_FRICTION = 0.96;
