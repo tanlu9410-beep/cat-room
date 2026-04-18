@@ -37,7 +37,7 @@ export function initInput() {
     const pos = getMousePos(e);
     const { gemini, cats, trashes, furnitures } = state;
 
-    card.style.display = 'none';
+    card.classList.remove('show');
     if (state.cardTimeout) clearTimeout(state.cardTimeout);
 
     // 第一层级：扫地机器人
@@ -84,12 +84,9 @@ export function initInput() {
       document.getElementById('card-content').textContent = item.c;
       document.getElementById('card-author').textContent = item.a;
 
-      card.style.display = 'block';
-      const rect = card.getBoundingClientRect();
-      const cWidth = rect.width || 280;
-      const cHeight = rect.height || 80;
+      const cWidth = 280;
       let cardLeft = e.clientX - cWidth / 2;
-      let cardTop = e.clientY - cHeight - 15;
+      let cardTop = e.clientY - 100;
 
       if (cardLeft + cWidth > window.innerWidth) cardLeft = window.innerWidth - cWidth - 15;
       if (cardLeft < 15) cardLeft = 15;
@@ -97,7 +94,8 @@ export function initInput() {
 
       card.style.left = cardLeft + 'px';
       card.style.top = cardTop + 'px';
-      state.cardTimeout = setTimeout(() => card.style.display = 'none', 5000);
+      card.classList.add('show');
+      state.cardTimeout = setTimeout(() => card.classList.remove('show'), 5000);
       return;
     }
 
@@ -156,8 +154,33 @@ export function initInput() {
               }
             }
           }, 1500);
+        } else {
+          // Personality-specific drop reaction
+          if (droppedEntity.type === 'black') droppedEntity.setEmo('💢', 1000);
+          else if (droppedEntity.type === 'orange') droppedEntity.setEmo('😴', 1000);
+          else if (droppedEntity.type === 'curly') droppedEntity.setEmo('♥', 1000);
+          else if (droppedEntity.type === 'cow') { droppedEntity.setEmo('!', 800); droppedEntity.vx = (Math.random() - 0.5) * 6; }
+          else droppedEntity.setEmo('❓', 800);
         }
       }
     }
   });
+
+  // Touch support
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    canvas.dispatchEvent(new MouseEvent('mousedown', { clientX: touch.clientX, clientY: touch.clientY }));
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    window.dispatchEvent(new MouseEvent('mousemove', { clientX: touch.clientX, clientY: touch.clientY }));
+  }, { passive: false });
+
+  canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    window.dispatchEvent(new MouseEvent('mouseup'));
+  }, { passive: false });
 }

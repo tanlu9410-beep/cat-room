@@ -87,6 +87,7 @@ export class GeminiBot {
       if (this.timer <= 0) { this.state = 'sweep'; this.emo = '♪'; }
     }
     else if (this.state === 'frenzy') {
+      if (!this.target) { this.state = 'idle'; this.timer = GEMINI_IDLE_TIMER; this.emo = '=_='; return; }
       let dx = this.target.x - this.x, dy = this.target.y - this.y;
       let dist = Math.hypot(dx, dy);
       if (dist > 0) { this.x += (dx / dist) * GEMINI_FRENZY_SPEED * dt; this.y += (dy / dist) * GEMINI_FRENZY_SPEED * dt; }
@@ -147,6 +148,10 @@ export class GeminiBot {
 
     ctx.fillStyle = '#2c3e50'; ctx.fillRect(-9, 6, 6, 4); ctx.fillRect(3, 6, 6, 4);
     ctx.strokeStyle = '#8b7355'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(10, -2); ctx.lineTo(20, 6); ctx.stroke();
+    // Status light
+    const lightOn = Math.sin(Date.now() * 0.005) > 0;
+    ctx.fillStyle = this.state === 'stuck' ? '#ff4444' : this.state === 'frenzy' ? '#ff8800' : (lightOn ? '#4ade80' : '#166534');
+    ctx.fillRect(7, -12, 3, 3);
 
     ctx.scale(dir < 0 ? -1 : 1, 1);
 

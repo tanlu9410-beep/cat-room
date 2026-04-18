@@ -10,9 +10,9 @@ export function updateWeather(dt) {
   }
 
   if (state.weather === 'rain') {
-    if (Math.random() < 0.5) state.particles.push({ x: 150 + Math.random() * 500, y: 50, vy: 10 + Math.random() * 5, l: 15 });
+    if (Math.random() < 0.6) state.particles.push({ x: 150 + Math.random() * 500, y: 50, vy: 10 + Math.random() * 5, l: 12 + Math.random() * 6 });
   } else if (state.weather === 'snow') {
-    if (Math.random() < 0.2) state.particles.push({ x: 150 + Math.random() * 500, y: 50, vy: 1 + Math.random(), vx: (Math.random() - 0.5) * 2, l: 3 });
+    if (Math.random() < 0.25) state.particles.push({ x: 150 + Math.random() * 500, y: 50, vy: 0.6 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 1.5, l: 2 + Math.random() * 2 });
   }
 
   state.particles.forEach(p => { p.y += p.vy; if (p.vx) p.x += p.vx; });

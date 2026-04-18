@@ -1,16 +1,22 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body { background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: sans-serif; }
-canvas { 
-  background: #2a2520; 
-  max-width: 100%; max-height: 100%; 
-  aspect-ratio: 4 / 3; 
-  box-shadow: 0 10px 40px rgba(0,0,0,0.8); 
-  cursor: crosshair; 
+canvas {
+  background: #2a2520;
+  max-width: 100%; max-height: 100%;
+  aspect-ratio: 4 / 3;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+  cursor: crosshair;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 #card {
-  display: none; position: fixed; background: #fef9f0; border: 2px solid #a68358; border-radius: 6px; 
-  padding: 14px; width: 280px; font-size: 14px; color: #333; box-shadow: 4px 4px 15px rgba(0,0,0,0.4); 
+  position: fixed; background: #fef9f0; border: 2px solid #a68358; border-radius: 6px;
+  padding: 14px; width: 280px; font-size: 14px; color: #333; box-shadow: 4px 4px 15px rgba(0,0,0,0.4);
   z-index: 100; pointer-events: none;
+  opacity: 0; transition: opacity 0.3s ease;
 }
+#card.show { opacity: 1; }
 #card-content { line-height: 1.6; }
 #card-author { margin-top: 10px; font-size: 11px; color: #888; text-align: right; }
